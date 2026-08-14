@@ -1,0 +1,57 @@
+# =========================================================================
+# Build Tools & Artifacts
+# =========================================================================
+# Maven
+target/
+
+# Gradle
+.gradle/
+build/
+
+# Packaging outputs
+*.jar
+*.war
+*.ear
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Spring local configuration
+application-local.*
+
+# Other local config variants
+*.properties.local
+*.yml.local
+*.yaml.local
+
+# =========================================================================
+# IDE Settings
+# =========================================================================
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# Eclipse / Spring Tool Suite (STS)
+.metadata/
+.classpath
+.project
+.settings/
+.springBeans
+.sts4-cache/
+bin/
+
+# Visual Studio Code
+.vscode/
+
+# =========================================================================
+# System & Logs
+# =========================================================================
+.DS_Store
+Thumbs.db
+*.log
+logs/
