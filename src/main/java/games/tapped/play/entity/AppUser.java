@@ -4,8 +4,9 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
-import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
@@ -18,19 +19,23 @@ public class AppUser {
     @GeneratedValue
     private UUID id;
 
-    @Column(nullable = false, unique = true)
     private String email;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "auth_provider", nullable = false)
     private AuthProvider authProvider;
 
-    @Column(name = "provider_subject", nullable = false)
+    @Column(name = "provider_subject")
     private String providerSubject;
 
-    @Column(name = "created_at", nullable = false)
-    private OffsetDateTime createdAt;
-
-    @Column(name = "deleted_at")
-    private OffsetDateTime deletedAt;
+    protected AppUser(
+            String email,
+            AuthProvider authProvider,
+            String providerSubject
+    ) {
+        this.email = email;
+        this.authProvider = authProvider;
+        this.providerSubject = providerSubject;
+    }
 }

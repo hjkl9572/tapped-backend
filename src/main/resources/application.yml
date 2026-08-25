@@ -30,3 +30,6 @@
                 - openid
                 - profile
                 - email
+    jwt:
+        public-key: classpath:keys/public.pem
+        private-key: file:${JWT_PRIVATE_KEY_PATH}
