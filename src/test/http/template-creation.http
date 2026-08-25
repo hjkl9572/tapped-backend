@@ -1,0 +1,8 @@
+POST http://localhost:8080/api/activity-templates
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Run every day",
+  "rules": "Run at least 20 minutes"
+}

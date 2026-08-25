@@ -105,4 +105,33 @@ public class ActivityTemplate {
 
     @Column(name = "photo_path")
     private String photoPath;
+
+    public static ActivityTemplate createRoot(
+            UUID createdBy,
+            String title,
+            String rules
+    ) {
+        ActivityTemplate template = new ActivityTemplate();
+
+        UUID id = UUID.randomUUID();
+
+        template.id = id;
+        template.originId = id;
+        template.parentId = null;
+
+        template.title = title;
+        template.rules = rules;
+
+        template.lifecycleState = TemplateLifecycleState.DRAFT;
+        template.proofKind = "ANY";
+        template.status = "ACTIVE";
+        template.playContext = TemplatePlayContext.ONLINE;
+        template.relationshipMode = TemplateRelationshipMode.SOLO;
+        template.modeKind = ActivityModeKind.CHALLENGE;
+        template.visibility = TemplateVisibility.PUBLIC;
+
+        template.createdBy = createdBy;
+
+        return template;
+    }
 }
