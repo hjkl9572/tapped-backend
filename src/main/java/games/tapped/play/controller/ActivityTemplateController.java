@@ -1,7 +1,8 @@
 package games.tapped.play.controller;
 
+import games.tapped.play.dto.ActivityTemplateResponse;
 import games.tapped.play.dto.CreateActivityTemplateRequest;
-import games.tapped.play.entity.UpdateActivityTemplateRequest;
+import games.tapped.play.dto.UpdateActivityTemplateRequest;
 import games.tapped.play.service.ActivityTemplateService;
 import games.tapped.security.AppJwtPrincipal;
 import lombok.RequiredArgsConstructor;
@@ -58,5 +59,15 @@ public class ActivityTemplateController {
         service.delete(id, principal.userId());
 
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}")
+    public ActivityTemplateResponse get(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal AppJwtPrincipal principal
+    ) {
+        return ActivityTemplateResponse.from(
+                service.get(id, principal.userId())
+        );
     }
 }

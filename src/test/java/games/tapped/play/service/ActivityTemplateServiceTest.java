@@ -1,7 +1,7 @@
 package games.tapped.play.service;
 
 import games.tapped.play.entity.ActivityTemplate;
-import games.tapped.play.entity.UpdateActivityTemplateRequest;
+import games.tapped.play.dto.UpdateActivityTemplateRequest;
 import games.tapped.play.repository.ActivityTemplateRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
