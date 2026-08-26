@@ -26,7 +26,6 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 
 
 @SpringBootTest
@@ -61,7 +60,6 @@ class ActivityTemplateControllerTest {
         mockMvc.perform(
                 post("/api/activity-templates")
                         .with(authentication(authentication))
-                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -78,7 +76,6 @@ class ActivityTemplateControllerTest {
     void anonymousUserCannotCreateTemplate() throws Exception {
         mockMvc.perform(
                         post("/api/activity-templates")
-                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("""
                                     {
@@ -108,7 +105,6 @@ class ActivityTemplateControllerTest {
         mockMvc.perform(
                         put("/api/activity-templates/{templateId}", templateId)
                                 .with(authentication(authentication))
-                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("""
                                     {
@@ -131,7 +127,6 @@ class ActivityTemplateControllerTest {
         UUID templateId = UUID.randomUUID();
         mockMvc.perform(
                         put("/api/activity-templates/{templateId}", templateId)
-                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("""
                                     {
@@ -160,7 +155,6 @@ class ActivityTemplateControllerTest {
         mockMvc.perform(
                         delete("/api/activity-templates/{templateId}", templateId)
                                 .with(authentication(authentication))
-                                .with(csrf())
                 )
                 .andExpect(status().isNoContent());
 
@@ -174,7 +168,6 @@ class ActivityTemplateControllerTest {
 
         mockMvc.perform(
                         delete("/api/activity-templates/{templateId}", templateId)
-                                .with(csrf())
                 )
                 .andExpect(status().isUnauthorized());
     }
