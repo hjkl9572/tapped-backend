@@ -23,9 +23,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 
@@ -140,6 +139,42 @@ class ActivityTemplateControllerTest {
                                         "rules": "Updated rules"
                                     }
                                     """)
+                )
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void authenticatedUserCanDeleteTemplate() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+
+        AppJwtPrincipal principal = new AppJwtPrincipal(userId);
+
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken(
+                        principal,
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_USER"))
+                );
+
+        mockMvc.perform(
+                        delete("/api/activity-templates/{templateId}", templateId)
+                                .with(authentication(authentication))
+                                .with(csrf())
+                )
+                .andExpect(status().isNoContent());
+
+        verify(activityTemplateService)
+                .delete(templateId, userId);
+    }
+
+    @Test
+    void anonymousUserCannotDeleteTemplate() throws Exception {
+        UUID templateId = UUID.randomUUID();
+
+        mockMvc.perform(
+                        delete("/api/activity-templates/{templateId}", templateId)
+                                .with(csrf())
                 )
                 .andExpect(status().isUnauthorized());
     }

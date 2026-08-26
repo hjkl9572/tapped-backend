@@ -13,8 +13,7 @@ import org.springframework.security.access.AccessDeniedException;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.BDDMockito.given;
 
 @ExtendWith(MockitoExtension.class)
@@ -88,5 +87,53 @@ class ActivityTemplateServiceTest {
 
         assertEquals("Old title", template.getTitle());
         assertEquals("Old rules", template.getRules());
+    }
+
+    @Test
+    void ownerCanDeleteTemplate() {
+        UUID ownerId = UUID.randomUUID();
+
+        ActivityTemplate template =
+                ActivityTemplate.createRoot(
+                        ownerId,
+                        "Title",
+                        "Rules"
+                );
+
+        UUID templateId = template.getId();
+
+        given(repository.findById(templateId))
+                .willReturn(Optional.of(template));
+
+        service.delete(templateId, ownerId);
+
+        assertNotNull(template.getDeletedAt());
+        assertEquals(ownerId, template.getDeletedBy());
+    }
+
+    @Test
+    void nonOwnerCannotDeleteTemplate() {
+        UUID ownerId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+
+        ActivityTemplate template =
+                ActivityTemplate.createRoot(
+                        ownerId,
+                        "Title",
+                        "Rules"
+                );
+
+        UUID templateId = template.getId();
+
+        given(repository.findById(templateId))
+                .willReturn(Optional.of(template));
+
+        assertThrows(
+                AccessDeniedException.class,
+                () -> service.delete(templateId, otherUserId)
+        );
+
+        assertNull(template.getDeletedAt());
+        assertNull(template.getDeletedBy());
     }
 }
