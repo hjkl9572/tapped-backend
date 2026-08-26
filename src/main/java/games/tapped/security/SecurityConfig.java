@@ -16,12 +16,16 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationConverter jwtAuthenticationConverter) throws Exception {
         return http
+                .csrf(csrf -> csrf
+                        .ignoringRequestMatchers("/api/**")
+                )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/oauth2/**",
                                 "/login/**"
                         ).permitAll()
-                        .anyRequest().authenticated()
+                        .requestMatchers("/api/**").authenticated()
+                        .anyRequest().permitAll()
                 )
                 .oauth2Login(oauth -> oauth
                         .userInfoEndpoint(userInfo -> userInfo
