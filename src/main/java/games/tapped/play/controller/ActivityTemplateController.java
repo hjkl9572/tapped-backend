@@ -49,4 +49,14 @@ public class ActivityTemplateController {
 
         return ResponseEntity.noContent().build();
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal AppJwtPrincipal principal
+    ) {
+        service.delete(id, principal.userId());
+
+        return ResponseEntity.noContent().build();
+    }
 }

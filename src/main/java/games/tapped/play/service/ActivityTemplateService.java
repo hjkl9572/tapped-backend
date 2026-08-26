@@ -53,4 +53,16 @@ public class ActivityTemplateService {
                 userId
         );
     }
+
+    @Transactional
+    public void delete(UUID templateId, UUID userId) {
+        ActivityTemplate template = repository.findById(templateId)
+                .orElseThrow();
+
+        if (!userId.equals(template.getCreatedBy())) {
+            throw new AccessDeniedException("Not resource owner");
+        }
+
+        template.softDelete(userId);
+    }
 }
