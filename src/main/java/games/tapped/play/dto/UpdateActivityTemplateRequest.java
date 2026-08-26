@@ -1,4 +1,4 @@
-package games.tapped.play.entity;
+package games.tapped.play.dto;
 
 public record UpdateActivityTemplateRequest(
         String title,
