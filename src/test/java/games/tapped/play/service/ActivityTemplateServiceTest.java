@@ -1,0 +1,92 @@
+package games.tapped.play.service;
+
+import games.tapped.play.entity.ActivityTemplate;
+import games.tapped.play.entity.UpdateActivityTemplateRequest;
+import games.tapped.play.repository.ActivityTemplateRepository;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
+
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.BDDMockito.given;
+
+@ExtendWith(MockitoExtension.class)
+class ActivityTemplateServiceTest {
+
+    @Mock
+    ActivityTemplateRepository repository;
+
+    @InjectMocks
+    ActivityTemplateService service;
+
+    @Test
+    void ownerCanUpdateTemplate() {
+        UUID userId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+
+        ActivityTemplate template =
+                ActivityTemplate.createRoot(
+                        userId,
+                        "Old title",
+                        "Old rules"
+                );
+
+        given(repository.findById(templateId))
+                .willReturn(Optional.of(template));
+
+        UpdateActivityTemplateRequest request =
+                new UpdateActivityTemplateRequest(
+                        "New title",
+                        "New rules"
+                );
+
+        service.update(templateId, userId, request);
+
+        assertEquals("New title", template.getTitle());
+        assertEquals("New rules", template.getRules());
+        assertEquals(userId, template.getUpdatedBy());
+    }
+
+    @Test
+    void nonOwnerCannotUpdateTemplate() {
+        UUID ownerId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+
+        ActivityTemplate template =
+                ActivityTemplate.createRoot(
+                        ownerId,
+                        "Old title",
+                        "Old rules"
+                );
+
+        UUID templateId = template.getId();
+
+        given(repository.findById(templateId))
+                .willReturn(Optional.of(template));
+
+        UpdateActivityTemplateRequest request =
+                new UpdateActivityTemplateRequest(
+                        "Hacked title",
+                        "Hacked rules"
+                );
+
+        assertThrows(
+                AccessDeniedException.class,
+                () -> service.update(
+                        templateId,
+                        otherUserId,
+                        request
+                )
+        );
+
+        assertEquals("Old title", template.getTitle());
+        assertEquals("Old rules", template.getRules());
+    }
+}
