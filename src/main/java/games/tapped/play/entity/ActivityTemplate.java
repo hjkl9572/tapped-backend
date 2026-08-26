@@ -134,4 +134,10 @@ public class ActivityTemplate {
 
         return template;
     }
+
+    public void update(String title, String rules, UUID updatedBy) {
+        this.title = title;
+        this.rules = rules;
+        this.updatedBy = updatedBy;
+    }
 }
