@@ -1,10 +1,11 @@
 package games.tapped.play.controller;
 
-import games.tapped.play.dto.ActivityTemplateResponse;
-import games.tapped.play.dto.CreateActivityTemplateRequest;
-import games.tapped.play.dto.UpdateActivityTemplateRequest;
+import games.tapped.play.dto.TemplateResponse;
+import games.tapped.play.dto.CreateTemplateRequest;
+import games.tapped.play.dto.UpdateTemplateRequest;
 import games.tapped.play.service.ActivityTemplateService;
 import games.tapped.security.AppJwtPrincipal;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,16 +16,16 @@ import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/activity-templates")
+@RequestMapping("/api/templates")
 @RequiredArgsConstructor
-public class ActivityTemplateController {
+public class TemplateController {
 
     private final ActivityTemplateService service;
 
     @PostMapping
     public ResponseEntity<Map<String, UUID>> create(
             @AuthenticationPrincipal AppJwtPrincipal principal,
-            @RequestBody CreateActivityTemplateRequest request
+            @Valid @RequestBody CreateTemplateRequest request
     ) {
         UUID id = service.create(
                 principal.userId(),
@@ -40,7 +41,7 @@ public class ActivityTemplateController {
     public ResponseEntity<Void> update(
             @PathVariable UUID id,
             @AuthenticationPrincipal AppJwtPrincipal principal,
-            @RequestBody UpdateActivityTemplateRequest request
+            @Valid @RequestBody UpdateTemplateRequest request
     ) {
         service.update(
                 id,
@@ -62,12 +63,16 @@ public class ActivityTemplateController {
     }
 
     @GetMapping("/{id}")
-    public ActivityTemplateResponse get(
+    public TemplateResponse get(
             @PathVariable UUID id,
             @AuthenticationPrincipal AppJwtPrincipal principal
     ) {
-        return ActivityTemplateResponse.from(
-                service.get(id, principal.userId())
+        UUID userId = principal != null
+                ? principal.userId()
+                : null;
+
+        return TemplateResponse.from(
+                service.get(id, userId)
         );
     }
 }

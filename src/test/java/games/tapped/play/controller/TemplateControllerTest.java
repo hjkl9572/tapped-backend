@@ -1,7 +1,8 @@
-package games.tapped.play;
+package games.tapped.play.controller;
 
-import games.tapped.play.dto.CreateActivityTemplateRequest;
-import games.tapped.play.dto.UpdateActivityTemplateRequest;
+import games.tapped.play.dto.CreateTemplateRequest;
+import games.tapped.play.dto.UpdateTemplateRequest;
+import games.tapped.play.entity.ActivityTemplate;
 import games.tapped.play.service.ActivityTemplateService;
 import games.tapped.security.AppJwtPrincipal;
 import org.junit.jupiter.api.Test;
@@ -9,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -21,6 +23,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -30,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class ActivityTemplateControllerTest {
+class TemplateControllerTest {
 
     @Autowired
     MockMvc mockMvc;
@@ -54,7 +57,7 @@ class ActivityTemplateControllerTest {
 
         given(activityTemplateService.create(
                 eq(userId),
-                any(CreateActivityTemplateRequest.class)
+                any(CreateTemplateRequest.class)
         )).willReturn(templateId);
 
         mockMvc.perform(
@@ -118,7 +121,7 @@ class ActivityTemplateControllerTest {
         verify(activityTemplateService).update(
                 eq(templateId),
                 eq(userId),
-                any(UpdateActivityTemplateRequest.class)
+                any(UpdateTemplateRequest.class)
         );
     }
 
@@ -170,5 +173,167 @@ class ActivityTemplateControllerTest {
                         delete("/api/activity-templates/{templateId}", templateId)
                 )
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void authenticatedUserCanGetPublicTemplate() throws Exception {
+        UUID userId = UUID.randomUUID();
+
+        ActivityTemplate template =
+                ActivityTemplate.createRoot(
+                        userId,
+                        "Public template",
+                        "Rules"
+                );
+
+        UUID templateId = template.getId();
+
+        AppJwtPrincipal principal = new AppJwtPrincipal(userId);
+
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken(
+                        principal,
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_USER"))
+                );
+
+        given(activityTemplateService.get(
+                templateId,
+                userId
+        )).willReturn(template);
+
+        mockMvc.perform(
+                        get("/api/activity-templates/{templateId}", templateId)
+                                .with(authentication(authentication))
+                )
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void authenticatedNonOwnerCannotGetPrivateTemplate() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+
+        ActivityTemplate template =
+                ActivityTemplate.createRoot(
+                        ownerId,
+                        "Private template",
+                        "Rules"
+                );
+
+        UUID templateId = template.getId();
+
+        AppJwtPrincipal principal = new AppJwtPrincipal(otherUserId);
+
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken(
+                        principal,
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_USER"))
+                );
+
+        given(activityTemplateService.get(
+                templateId,
+                otherUserId
+        )).willThrow(new AccessDeniedException("Not allowed"));
+
+        mockMvc.perform(
+                        get("/api/activity-templates/{templateId}", templateId)
+                                .with(authentication(authentication))
+                )
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void anonymousUserCanGetPublicTemplate() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+
+        ActivityTemplate template =
+                ActivityTemplate.createRoot(
+                        ownerId,
+                        "Public template",
+                        "Rules"
+                );
+
+        UUID templateId = template.getId();
+
+        given(activityTemplateService.get(
+                templateId,
+                null
+        )).willReturn(template);
+
+        mockMvc.perform(
+                        get("/api/activity-templates/{templateId}", templateId)
+                )
+                .andExpect(status().isOk());
+
+        verify(activityTemplateService)
+                .get(templateId, null);
+    }
+
+    @Test
+    void authenticatedOwnerCanGetPrivateTemplate() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+
+        ActivityTemplate template =
+                ActivityTemplate.createRoot(
+                        ownerId,
+                        "Private template",
+                        "Rules"
+                );
+
+        UUID templateId = template.getId();
+
+        AppJwtPrincipal principal = new AppJwtPrincipal(ownerId);
+
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken(
+                        principal,
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_USER"))
+                );
+
+        given(activityTemplateService.get(
+                templateId,
+                ownerId
+        )).willReturn(template);
+
+        mockMvc.perform(
+                        get("/api/activity-templates/{templateId}", templateId)
+                                .with(authentication(authentication))
+                )
+                .andExpect(status().isOk());
+
+        verify(activityTemplateService)
+                .get(templateId, ownerId);
+    }
+
+    @Test
+    void cannotCreateTemplateWithBlankTitle() throws Exception {
+        UUID userId = UUID.randomUUID();
+
+        AppJwtPrincipal principal = new AppJwtPrincipal(userId);
+
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken(
+                        principal,
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_USER"))
+                );
+
+        mockMvc.perform(
+                        post("/api/activity-templates")
+                                .with(authentication(authentication))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                    {
+                                      "title": "",
+                                      "rules": "Rules"
+                                    }
+                                    """)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error")
+                        .value("VALIDATION_FAILED"));
     }
 }
