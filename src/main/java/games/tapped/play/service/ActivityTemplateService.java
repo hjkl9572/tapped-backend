@@ -1,9 +1,9 @@
 package games.tapped.play.service;
 
-import games.tapped.play.dto.CreateActivityTemplateRequest;
+import games.tapped.play.dto.CreateTemplateRequest;
 import games.tapped.play.entity.ActivityTemplate;
 import games.tapped.play.entity.TemplateVisibility;
-import games.tapped.play.dto.UpdateActivityTemplateRequest;
+import games.tapped.play.dto.UpdateTemplateRequest;
 import games.tapped.play.repository.ActivityTemplateRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +11,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -22,7 +23,7 @@ public class ActivityTemplateService {
     @Transactional
     public UUID create(
             UUID userId,
-            CreateActivityTemplateRequest request
+            CreateTemplateRequest request
     ) {
         ActivityTemplate template =
                 ActivityTemplate.createRoot(
@@ -40,7 +41,7 @@ public class ActivityTemplateService {
     public void update(
             UUID templateId,
             UUID userId,
-            UpdateActivityTemplateRequest request
+            UpdateTemplateRequest request
     ) {
         ActivityTemplate template = repository.findById(templateId)
                 .orElseThrow();
@@ -78,7 +79,7 @@ public class ActivityTemplateService {
         }
 
         if (template.getVisibility() == TemplateVisibility.PRIVATE
-                && !userId.equals(template.getCreatedBy())) {
+                && !Objects.equals(template.getCreatedBy(), userId)) {
             throw new AccessDeniedException("Not allowed");
         }
 
