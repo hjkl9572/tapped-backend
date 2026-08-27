@@ -146,4 +146,8 @@ public class ActivityTemplate {
         this.deletedAt = OffsetDateTime.now(ZoneOffset.UTC);
         this.deletedBy = deletedBy;
     }
+
+    public void changeVisibility(TemplateVisibility visibility) {
+        this.visibility = visibility;
+    }
 }
