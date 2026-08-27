@@ -1,7 +1,8 @@
 package games.tapped.play.service;
 
 import games.tapped.play.entity.ActivityTemplate;
-import games.tapped.play.dto.UpdateActivityTemplateRequest;
+import games.tapped.play.dto.UpdateTemplateRequest;
+import games.tapped.play.entity.TemplateVisibility;
 import games.tapped.play.repository.ActivityTemplateRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,8 +41,8 @@ class ActivityTemplateServiceTest {
         given(repository.findById(templateId))
                 .willReturn(Optional.of(template));
 
-        UpdateActivityTemplateRequest request =
-                new UpdateActivityTemplateRequest(
+        UpdateTemplateRequest request =
+                new UpdateTemplateRequest(
                         "New title",
                         "New rules"
                 );
@@ -70,8 +71,8 @@ class ActivityTemplateServiceTest {
         given(repository.findById(templateId))
                 .willReturn(Optional.of(template));
 
-        UpdateActivityTemplateRequest request =
-                new UpdateActivityTemplateRequest(
+        UpdateTemplateRequest request =
+                new UpdateTemplateRequest(
                         "Hacked title",
                         "Hacked rules"
                 );
@@ -136,4 +137,95 @@ class ActivityTemplateServiceTest {
         assertNull(template.getDeletedAt());
         assertNull(template.getDeletedBy());
     }
+
+    @Test
+    void anyoneCanGetPublicTemplate() {
+        UUID ownerId = UUID.randomUUID();
+
+        ActivityTemplate template =
+                ActivityTemplate.createRoot(
+                        ownerId,
+                        "Public template",
+                        "Rules"
+                );
+
+        UUID templateId = template.getId();
+
+        given(repository.findById(templateId))
+                .willReturn(Optional.of(template));
+
+        ActivityTemplate result =
+                service.get(templateId, null);
+
+        assertSame(template, result);
+    }
+
+    @Test
+    void ownerCanGetPrivateTemplate() {
+        UUID ownerId = UUID.randomUUID();
+
+        ActivityTemplate template =
+                ActivityTemplate.createRoot(
+                        ownerId,
+                        "Private template",
+                        "Rules"
+                );
+
+        template.changeVisibility(TemplateVisibility.PRIVATE);
+
+        given(repository.findById(template.getId()))
+                .willReturn(Optional.of(template));
+
+        ActivityTemplate result =
+                service.get(template.getId(), ownerId);
+
+        assertSame(template, result);
+    }
+
+    @Test
+    void nonOwnerCannotGetPrivateTemplate() {
+        UUID ownerId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+
+        ActivityTemplate template =
+                ActivityTemplate.createRoot(
+                        ownerId,
+                        "Private template",
+                        "Rules"
+                );
+
+        template.changeVisibility(TemplateVisibility.PRIVATE);
+
+        given(repository.findById(template.getId()))
+                .willReturn(Optional.of(template));
+
+        assertThrows(
+                AccessDeniedException.class,
+                () -> service.get(template.getId(), otherUserId)
+        );
+    }
+
+    @Test
+    void anonymousUserCannotGetPrivateTemplate() {
+        UUID ownerId = UUID.randomUUID();
+
+        ActivityTemplate template =
+                ActivityTemplate.createRoot(
+                        ownerId,
+                        "Private template",
+                        "Rules"
+                );
+
+        template.changeVisibility(TemplateVisibility.PRIVATE);
+
+        given(repository.findById(template.getId()))
+                .willReturn(Optional.of(template));
+
+        assertThrows(
+                AccessDeniedException.class,
+                () -> service.get(template.getId(), null)
+        );
+    }
+
+
 }
