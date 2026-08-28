@@ -29,6 +29,11 @@ public class SecurityConfig {
                                 HttpMethod.GET,
                                 "/api/templates/**"
                         ).permitAll()
+                        .requestMatchers(
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html"
+                        ).permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll()
                 )
