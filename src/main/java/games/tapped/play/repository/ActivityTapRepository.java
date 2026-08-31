@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -44,4 +45,16 @@ public interface ActivityTapRepository
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select tap from ActivityTap tap where tap.id = :id")
     Optional<ActivityTap> findByIdForUpdate(@Param("id") UUID id);
+
+    @Query("""
+            select count(tap)
+            from ActivityTap tap
+            where tap.finalizedAt is not null
+              and tap.finalizedAt >= :windowStart
+              and tap.finalizedAt <= :windowEnd
+            """)
+    long countFinalizedBetween(
+            @Param("windowStart") OffsetDateTime windowStart,
+            @Param("windowEnd") OffsetDateTime windowEnd
+    );
 }

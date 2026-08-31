@@ -31,6 +31,10 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
+                                "/api/taps/count"
+                        ).permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
                                 "/api/instances/ref-decisions/session"
                         ).permitAll()
                         .requestMatchers(
