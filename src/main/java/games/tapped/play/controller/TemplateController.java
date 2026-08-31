@@ -1,8 +1,11 @@
 package games.tapped.play.controller;
 
+import games.tapped.play.dto.TemplateCatalogResponse;
+import games.tapped.play.dto.TemplateMutationResponse;
 import games.tapped.play.dto.TemplateResponse;
 import games.tapped.play.dto.CreateTemplateRequest;
 import games.tapped.play.dto.UpdateTemplateRequest;
+import games.tapped.play.entity.ActivityTemplate;
 import games.tapped.play.service.ActivityTemplateService;
 import games.tapped.security.AppJwtPrincipal;
 import jakarta.validation.Valid;
@@ -12,7 +15,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -23,21 +25,40 @@ public class TemplateController {
     private final ActivityTemplateService service;
 
     @PostMapping
-    public ResponseEntity<Map<String, UUID>> create(
+    public ResponseEntity<TemplateMutationResponse> create(
             @AuthenticationPrincipal AppJwtPrincipal principal,
             @Valid @RequestBody CreateTemplateRequest request
     ) {
-        UUID id = service.create(
+        ActivityTemplate template = service.save(
                 principal.userId(),
                 request
         );
 
         return ResponseEntity
                 .status(HttpStatus.CREATED)
-                .body(Map.of("id", id));
+                .body(TemplateMutationResponse.saved(
+                        template.getId(),
+                        template.getPhotoPath(),
+                        template.getLifecycleState()
+                ));
     }
 
     @PutMapping("/{id}")
+    public ResponseEntity<Void> put(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal AppJwtPrincipal principal,
+            @Valid @RequestBody UpdateTemplateRequest request
+    ) {
+        service.update(
+                id,
+                principal.userId(),
+                request
+        );
+
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{id}")
     public ResponseEntity<Void> update(
             @PathVariable UUID id,
             @AuthenticationPrincipal AppJwtPrincipal principal,
@@ -74,5 +95,10 @@ public class TemplateController {
         return TemplateResponse.from(
                 service.get(id, userId)
         );
+    }
+
+    @GetMapping
+    public TemplateCatalogResponse catalog() {
+        return service.catalog();
     }
 }

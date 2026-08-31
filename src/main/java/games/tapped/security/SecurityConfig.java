@@ -30,6 +30,15 @@ public class SecurityConfig {
                                 "/api/templates/**"
                         ).permitAll()
                         .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/instances/ref-decisions/session"
+                        ).permitAll()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/instances/ref-decisions"
+                        ).permitAll()
+                        .requestMatchers("/test/**").authenticated()
+                        .requestMatchers(
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html"

@@ -36,6 +36,6 @@ class AuthTestControllerTest {
     @Test
     void anonymousUserCannotAccessMe() throws Exception {
         mockMvc.perform(get("/test/me"))
-                .andExpect(status().is3xxRedirection());
+                .andExpect(status().isUnauthorized());
     }
 }

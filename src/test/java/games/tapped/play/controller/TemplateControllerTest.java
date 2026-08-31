@@ -3,6 +3,8 @@ package games.tapped.play.controller;
 import games.tapped.play.dto.CreateTemplateRequest;
 import games.tapped.play.dto.UpdateTemplateRequest;
 import games.tapped.play.entity.ActivityTemplate;
+import games.tapped.play.entity.TemplateLifecycleState;
+import games.tapped.play.entity.TemplateVisibility;
 import games.tapped.play.service.ActivityTemplateService;
 import games.tapped.security.AppJwtPrincipal;
 import org.junit.jupiter.api.Test;
@@ -17,6 +19,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -55,35 +59,49 @@ class TemplateControllerTest {
                         List.of(new SimpleGrantedAuthority("ROLE_USER"))
                 );
 
-        given(activityTemplateService.create(
+        ActivityTemplate template = ActivityTemplate.createRoot(
+                templateId,
+                userId,
+                "Run every day",
+                "Run at least 20 minutes",
+                TemplateVisibility.PUBLIC,
+                TemplateLifecycleState.DRAFT,
+                null,
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+
+        given(activityTemplateService.save(
                 eq(userId),
                 any(CreateTemplateRequest.class)
-        )).willReturn(templateId);
+        )).willReturn(template);
 
         mockMvc.perform(
-                post("/api/activity-templates")
+                post("/api/templates")
                         .with(authentication(authentication))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                     "title": "Run every day",
-                                    "rules": "Run at least 20 minutes"
+                                    "rules": "Run at least 20 minutes",
+                                    "lifecycleState": "DRAFT"
                                 }
                                 """)
         )
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(templateId.toString()));
+                .andExpect(jsonPath("$.template_id").value(templateId.toString()))
+                .andExpect(jsonPath("$.lifecycle_state").value("DRAFT"));
     }
 
     @Test
     void anonymousUserCannotCreateTemplate() throws Exception {
         mockMvc.perform(
-                        post("/api/activity-templates")
+                        post("/api/templates")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("""
                                     {
                                       "title": "Run every day",
-                                      "rules": "Run at least 20 minutes"
+                                      "rules": "Run at least 20 minutes",
+                                      "lifecycleState": "DRAFT"
                                     }
                                     """)
                 )
@@ -106,7 +124,7 @@ class TemplateControllerTest {
                 );
 
         mockMvc.perform(
-                        put("/api/activity-templates/{templateId}", templateId)
+                        put("/api/templates/{templateId}", templateId)
                                 .with(authentication(authentication))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("""
@@ -129,7 +147,7 @@ class TemplateControllerTest {
     void anonymousUserCannotUpdateTemplate() throws Exception {
         UUID templateId = UUID.randomUUID();
         mockMvc.perform(
-                        put("/api/activity-templates/{templateId}", templateId)
+                        put("/api/templates/{templateId}", templateId)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("""
                                     {
@@ -156,7 +174,7 @@ class TemplateControllerTest {
                 );
 
         mockMvc.perform(
-                        delete("/api/activity-templates/{templateId}", templateId)
+                        delete("/api/templates/{templateId}", templateId)
                                 .with(authentication(authentication))
                 )
                 .andExpect(status().isNoContent());
@@ -170,7 +188,7 @@ class TemplateControllerTest {
         UUID templateId = UUID.randomUUID();
 
         mockMvc.perform(
-                        delete("/api/activity-templates/{templateId}", templateId)
+                        delete("/api/templates/{templateId}", templateId)
                 )
                 .andExpect(status().isUnauthorized());
     }
@@ -203,7 +221,7 @@ class TemplateControllerTest {
         )).willReturn(template);
 
         mockMvc.perform(
-                        get("/api/activity-templates/{templateId}", templateId)
+                        get("/api/templates/{templateId}", templateId)
                                 .with(authentication(authentication))
                 )
                 .andExpect(status().isOk());
@@ -238,7 +256,7 @@ class TemplateControllerTest {
         )).willThrow(new AccessDeniedException("Not allowed"));
 
         mockMvc.perform(
-                        get("/api/activity-templates/{templateId}", templateId)
+                        get("/api/templates/{templateId}", templateId)
                                 .with(authentication(authentication))
                 )
                 .andExpect(status().isForbidden());
@@ -263,7 +281,7 @@ class TemplateControllerTest {
         )).willReturn(template);
 
         mockMvc.perform(
-                        get("/api/activity-templates/{templateId}", templateId)
+                        get("/api/templates/{templateId}", templateId)
                 )
                 .andExpect(status().isOk());
 
@@ -299,7 +317,7 @@ class TemplateControllerTest {
         )).willReturn(template);
 
         mockMvc.perform(
-                        get("/api/activity-templates/{templateId}", templateId)
+                        get("/api/templates/{templateId}", templateId)
                                 .with(authentication(authentication))
                 )
                 .andExpect(status().isOk());
@@ -322,13 +340,14 @@ class TemplateControllerTest {
                 );
 
         mockMvc.perform(
-                        post("/api/activity-templates")
+                        post("/api/templates")
                                 .with(authentication(authentication))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("""
                                     {
                                       "title": "",
-                                      "rules": "Rules"
+                                      "rules": "Rules",
+                                      "lifecycleState": "DRAFT"
                                     }
                                     """)
                 )

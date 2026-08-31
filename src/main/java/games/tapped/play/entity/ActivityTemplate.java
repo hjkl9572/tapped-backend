@@ -112,9 +112,29 @@ public class ActivityTemplate {
             String title,
             String rules
     ) {
-        ActivityTemplate template = new ActivityTemplate();
+        return createRoot(
+                UUID.randomUUID(),
+                createdBy,
+                title,
+                rules,
+                TemplateVisibility.PUBLIC,
+                TemplateLifecycleState.DRAFT,
+                null,
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+    }
 
-        UUID id = UUID.randomUUID();
+    public static ActivityTemplate createRoot(
+            UUID id,
+            UUID createdBy,
+            String title,
+            String rules,
+            TemplateVisibility visibility,
+            TemplateLifecycleState lifecycleState,
+            String photoPath,
+            OffsetDateTime now
+    ) {
+        ActivityTemplate template = new ActivityTemplate();
 
         template.id = id;
         template.originId = id;
@@ -122,16 +142,23 @@ public class ActivityTemplate {
 
         template.title = title;
         template.rules = rules;
+        template.photoPath = photoPath;
 
-        template.lifecycleState = TemplateLifecycleState.DRAFT;
+        template.lifecycleState = lifecycleState;
         template.proofKind = "ANY";
         template.status = "ACTIVE";
         template.playContext = TemplatePlayContext.ONLINE;
         template.relationshipMode = TemplateRelationshipMode.SOLO;
+        template.minParticipants = 1;
+        template.maxParticipants = 1;
         template.modeKind = ActivityModeKind.CHALLENGE;
-        template.visibility = TemplateVisibility.PUBLIC;
+        template.visibility = visibility;
+        template.publishedAt = lifecycleState == TemplateLifecycleState.PUBLISHED
+                ? now
+                : null;
 
         template.createdBy = createdBy;
+        template.updatedBy = createdBy;
 
         return template;
     }
@@ -142,6 +169,32 @@ public class ActivityTemplate {
         this.updatedBy = updatedBy;
     }
 
+    public void replaceContent(
+            String title,
+            String rules,
+            TemplateVisibility visibility,
+            TemplateLifecycleState lifecycleState,
+            String photoPath,
+            UUID updatedBy,
+            OffsetDateTime now
+    ) {
+        this.title = title;
+        this.rules = rules;
+        this.visibility = visibility;
+        this.lifecycleState = lifecycleState;
+        this.photoPath = photoPath;
+        this.publishedAt = lifecycleState == TemplateLifecycleState.PUBLISHED
+                ? now
+                : null;
+        this.modeKind = ActivityModeKind.CHALLENGE;
+        this.playContext = TemplatePlayContext.ONLINE;
+        this.relationshipMode = TemplateRelationshipMode.SOLO;
+        this.proofKind = "ANY";
+        this.minParticipants = 1;
+        this.maxParticipants = 1;
+        this.updatedBy = updatedBy;
+    }
+
     public void softDelete(UUID deletedBy) {
         this.deletedAt = OffsetDateTime.now(ZoneOffset.UTC);
         this.deletedBy = deletedBy;
@@ -149,5 +202,12 @@ public class ActivityTemplate {
 
     public void changeVisibility(TemplateVisibility visibility) {
         this.visibility = visibility;
+    }
+
+    public boolean isCatalogVisible() {
+        return deletedAt == null
+                && visibility == TemplateVisibility.PUBLIC
+                && lifecycleState == TemplateLifecycleState.PUBLISHED
+                && publishedAt != null;
     }
 }

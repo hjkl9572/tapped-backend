@@ -3,7 +3,9 @@ package games.tapped.play.service;
 import games.tapped.play.entity.ActivityTemplate;
 import games.tapped.play.dto.UpdateTemplateRequest;
 import games.tapped.play.entity.TemplateVisibility;
+import games.tapped.play.repository.ActivityTemplateChallengeConfigRepository;
 import games.tapped.play.repository.ActivityTemplateRepository;
+import games.tapped.play.repository.PublicActivityTemplateRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -23,6 +25,12 @@ class ActivityTemplateServiceTest {
     @Mock
     ActivityTemplateRepository repository;
 
+    @Mock
+    ActivityTemplateChallengeConfigRepository challengeConfigRepository;
+
+    @Mock
+    PublicActivityTemplateRepository publicActivityTemplateRepository;
+
     @InjectMocks
     ActivityTemplateService service;
 
@@ -38,7 +46,7 @@ class ActivityTemplateServiceTest {
                         "Old rules"
                 );
 
-        given(repository.findById(templateId))
+        given(repository.findByIdForUpdate(templateId))
                 .willReturn(Optional.of(template));
 
         UpdateTemplateRequest request =
@@ -68,7 +76,7 @@ class ActivityTemplateServiceTest {
 
         UUID templateId = template.getId();
 
-        given(repository.findById(templateId))
+        given(repository.findByIdForUpdate(templateId))
                 .willReturn(Optional.of(template));
 
         UpdateTemplateRequest request =
@@ -103,7 +111,7 @@ class ActivityTemplateServiceTest {
 
         UUID templateId = template.getId();
 
-        given(repository.findById(templateId))
+        given(repository.findByIdForUpdate(templateId))
                 .willReturn(Optional.of(template));
 
         service.delete(templateId, ownerId);
@@ -126,7 +134,7 @@ class ActivityTemplateServiceTest {
 
         UUID templateId = template.getId();
 
-        given(repository.findById(templateId))
+        given(repository.findByIdForUpdate(templateId))
                 .willReturn(Optional.of(template));
 
         assertThrows(
