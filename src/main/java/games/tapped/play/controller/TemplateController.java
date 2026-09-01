@@ -1,5 +1,6 @@
 package games.tapped.play.controller;
 
+import games.tapped.play.dto.ShowcaseTemplatesResponse;
 import games.tapped.play.dto.TemplateCatalogResponse;
 import games.tapped.play.dto.TemplateMutationResponse;
 import games.tapped.play.dto.TemplateResponse;
@@ -81,6 +82,13 @@ public class TemplateController {
         service.delete(id, principal.userId());
 
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/showcase")
+    public ShowcaseTemplatesResponse showcase(
+            @RequestParam(required = false) Integer limit
+    ) {
+        return service.getShowcaseTemplates(limit);
     }
 
     @GetMapping("/{id}")

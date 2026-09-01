@@ -1,6 +1,8 @@
 package games.tapped.play.controller;
 
 import games.tapped.play.dto.CreateTemplateRequest;
+import games.tapped.play.dto.ShowcaseTemplateItem;
+import games.tapped.play.dto.ShowcaseTemplatesResponse;
 import games.tapped.play.dto.UpdateTemplateRequest;
 import games.tapped.play.entity.ActivityTemplate;
 import games.tapped.play.entity.TemplateLifecycleState;
@@ -354,5 +356,71 @@ class TemplateControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error")
                         .value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void anonymousUserCanGetShowcaseTemplates() throws Exception {
+        UUID id = UUID.randomUUID();
+        given(activityTemplateService.getShowcaseTemplates(null))
+                .willReturn(new ShowcaseTemplatesResponse(List.of(
+                        new ShowcaseTemplateItem(
+                                id, UUID.randomUUID(), "Run every day", "Run at least 20 minutes",
+                                "templates/run.png", "Jane",
+                                OffsetDateTime.parse("2026-01-01T00:00:00Z")
+                        )
+                )));
+
+        mockMvc.perform(get("/api/templates/showcase"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value(id.toString()))
+                .andExpect(jsonPath("$.items[0].title").value("Run every day"))
+                .andExpect(jsonPath("$.items[0].photo_path").value("templates/run.png"));
+    }
+
+    @Test
+    void showcaseForwardsRequestedLimitToService() throws Exception {
+        given(activityTemplateService.getShowcaseTemplates(5))
+                .willReturn(new ShowcaseTemplatesResponse(List.of()));
+
+        mockMvc.perform(get("/api/templates/showcase").param("limit", "5"))
+                .andExpect(status().isOk());
+
+        verify(activityTemplateService).getShowcaseTemplates(5);
+    }
+
+    @Test
+    void showcaseOmittedLimitPassesNullToService() throws Exception {
+        given(activityTemplateService.getShowcaseTemplates(null))
+                .willReturn(new ShowcaseTemplatesResponse(List.of()));
+
+        mockMvc.perform(get("/api/templates/showcase"))
+                .andExpect(status().isOk());
+
+        verify(activityTemplateService).getShowcaseTemplates(null);
+    }
+
+    @Test
+    void showcaseEmptyResultReturnsEmptyItems() throws Exception {
+        given(activityTemplateService.getShowcaseTemplates(null))
+                .willReturn(new ShowcaseTemplatesResponse(List.of()));
+
+        mockMvc.perform(get("/api/templates/showcase"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items").isEmpty());
+    }
+
+    @Test
+    void showcaseMalformedLimitReturnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/templates/showcase").param("limit", "not-a-number"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void showcaseInvalidLimitFromServiceReturnsBadRequest() throws Exception {
+        given(activityTemplateService.getShowcaseTemplates(0))
+                .willThrow(new IllegalArgumentException("limit must be at least 1"));
+
+        mockMvc.perform(get("/api/templates/showcase").param("limit", "0"))
+                .andExpect(status().isBadRequest());
     }
 }

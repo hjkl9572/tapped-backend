@@ -1,11 +1,13 @@
 package games.tapped.play.service;
 
+import games.tapped.play.dto.ShowcaseTemplatesResponse;
 import games.tapped.play.entity.ActivityTemplate;
 import games.tapped.play.dto.UpdateTemplateRequest;
 import games.tapped.play.entity.TemplateVisibility;
 import games.tapped.play.repository.ActivityTemplateChallengeConfigRepository;
 import games.tapped.play.repository.ActivityTemplateRepository;
 import games.tapped.play.repository.PublicActivityTemplateRepository;
+import games.tapped.play.repository.ShowcaseTemplateRow;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -13,11 +15,15 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class ActivityTemplateServiceTest {
@@ -235,5 +241,83 @@ class ActivityTemplateServiceTest {
         );
     }
 
+    @Test
+    void showcaseUsesDefaultLimitWhenNull() {
+        given(repository.findShowcaseTemplates(ActivityTemplateService.DEFAULT_SHOWCASE_LIMIT))
+                .willReturn(List.of());
 
+        service.getShowcaseTemplates(null);
+
+        verify(repository).findShowcaseTemplates(ActivityTemplateService.DEFAULT_SHOWCASE_LIMIT);
+    }
+
+    @Test
+    void showcaseForwardsExplicitLimitToRepository() {
+        given(repository.findShowcaseTemplates(5)).willReturn(List.of());
+
+        service.getShowcaseTemplates(5);
+
+        verify(repository).findShowcaseTemplates(5);
+    }
+
+    @Test
+    void showcaseRejectsZeroLimit() {
+        assertThrows(IllegalArgumentException.class, () -> service.getShowcaseTemplates(0));
+    }
+
+    @Test
+    void showcaseRejectsNegativeLimit() {
+        assertThrows(IllegalArgumentException.class, () -> service.getShowcaseTemplates(-1));
+    }
+
+    @Test
+    void showcaseRejectsLimitAboveMax() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.getShowcaseTemplates(ActivityTemplateService.MAX_SHOWCASE_LIMIT + 1)
+        );
+    }
+
+    @Test
+    void showcaseAllowsLimitAtMax() {
+        given(repository.findShowcaseTemplates(ActivityTemplateService.MAX_SHOWCASE_LIMIT))
+                .willReturn(List.of());
+
+        service.getShowcaseTemplates(ActivityTemplateService.MAX_SHOWCASE_LIMIT);
+
+        verify(repository).findShowcaseTemplates(ActivityTemplateService.MAX_SHOWCASE_LIMIT);
+    }
+
+    @Test
+    void showcaseMapsRowsToResponseItems() {
+        UUID id = UUID.randomUUID();
+        UUID originId = UUID.randomUUID();
+        ShowcaseTemplateRow row = mock(ShowcaseTemplateRow.class);
+        given(row.getId()).willReturn(id);
+        given(row.getOriginId()).willReturn(originId);
+        given(row.getTitle()).willReturn("Run every day");
+        given(row.getRules()).willReturn("Run at least 20 minutes");
+        given(row.getPhotoPath()).willReturn("templates/run.png");
+        given(row.getCreatorDisplayName()).willReturn("Jane");
+        given(row.getPublishedAt()).willReturn(Instant.parse("2026-01-01T00:00:00Z"));
+        given(repository.findShowcaseTemplates(12)).willReturn(List.of(row));
+
+        ShowcaseTemplatesResponse response = service.getShowcaseTemplates(null);
+
+        assertEquals(1, response.items().size());
+        assertEquals(id, response.items().get(0).id());
+        assertEquals(originId, response.items().get(0).originId());
+        assertEquals("Run every day", response.items().get(0).title());
+        assertEquals("templates/run.png", response.items().get(0).photoPath());
+        assertEquals("Jane", response.items().get(0).creatorDisplayName());
+    }
+
+    @Test
+    void showcaseReturnsEmptyItemsWhenNoTemplatesEligible() {
+        given(repository.findShowcaseTemplates(12)).willReturn(List.of());
+
+        ShowcaseTemplatesResponse response = service.getShowcaseTemplates(null);
+
+        assertTrue(response.items().isEmpty());
+    }
 }

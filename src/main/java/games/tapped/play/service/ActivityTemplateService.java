@@ -1,5 +1,7 @@
 package games.tapped.play.service;
 
+import games.tapped.play.dto.ShowcaseTemplateItem;
+import games.tapped.play.dto.ShowcaseTemplatesResponse;
 import games.tapped.play.dto.TemplateCatalogResponse;
 import games.tapped.play.dto.TemplateChallengeModeRequest;
 import games.tapped.play.dto.TemplatePresetResponse;
@@ -13,6 +15,7 @@ import games.tapped.play.dto.UpdateTemplateRequest;
 import games.tapped.play.repository.ActivityTemplateChallengeConfigRepository;
 import games.tapped.play.repository.ActivityTemplateRepository;
 import games.tapped.play.repository.PublicActivityTemplateRepository;
+import games.tapped.play.repository.ShowcaseTemplateRow;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
@@ -21,12 +24,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Objects;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class ActivityTemplateService {
+
+    public static final int DEFAULT_SHOWCASE_LIMIT = 12;
+    public static final int MAX_SHOWCASE_LIMIT = 50;
 
     private final ActivityTemplateRepository repository;
     private final ActivityTemplateChallengeConfigRepository challengeConfigRepository;
@@ -168,6 +175,37 @@ public class ActivityTemplateService {
                         .stream()
                         .map(this::toPreset)
                         .toList()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public ShowcaseTemplatesResponse getShowcaseTemplates(Integer requestedLimit) {
+        int limit = requestedLimit == null ? DEFAULT_SHOWCASE_LIMIT : requestedLimit;
+
+        if (limit < 1) {
+            throw new IllegalArgumentException("limit must be at least 1");
+        }
+        if (limit > MAX_SHOWCASE_LIMIT) {
+            throw new IllegalArgumentException("limit must not exceed " + MAX_SHOWCASE_LIMIT);
+        }
+
+        return new ShowcaseTemplatesResponse(
+                repository.findShowcaseTemplates(limit)
+                        .stream()
+                        .map(this::toShowcaseItem)
+                        .toList()
+        );
+    }
+
+    private ShowcaseTemplateItem toShowcaseItem(ShowcaseTemplateRow row) {
+        return new ShowcaseTemplateItem(
+                row.getId(),
+                row.getOriginId(),
+                row.getTitle(),
+                row.getRules(),
+                row.getPhotoPath(),
+                row.getCreatorDisplayName(),
+                row.getPublishedAt() == null ? null : row.getPublishedAt().atOffset(ZoneOffset.UTC)
         );
     }
 
