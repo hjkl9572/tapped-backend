@@ -144,4 +144,77 @@ public interface TapCardRepository
             @Param("result") String result,
             @Param("limit") int limit
     );
+
+    @Query(
+            value = """
+                    with candidates as (
+                        select
+                            tc.id as card_id,
+                            tc.tap_id as tap_id,
+                            tc.activity_instance_id as activity_instance_id,
+                            ai.activity_template_id as activity_template_id,
+                            at.title as instance_title,
+                            at.status as template_status,
+                            tc.note as note,
+                            coalesce(tc.photo_path, at.photo_path) as photo_path,
+                            coalesce(cfg.fail_card_fee_minor, 0) as fail_card_fee_minor,
+                            cfg.challenger_final_verdict::text as challenger_final_verdict,
+                            ai.state::text as instance_state,
+                            cfg.ref_verdict::text as ref_verdict,
+                            coalesce(lc.like_count, 0) as like_count,
+                            coalesce(rc.reply_count, 0) as reply_count,
+                            greatest(
+                                tc.updated_at,
+                                tap.updated_at,
+                                ai.updated_at,
+                                coalesce(cfg.updated_at, tc.updated_at),
+                                coalesce(cfg.challenger_finalized_at, tc.updated_at)
+                            ) as sort_updated_at
+                        from tap_cards tc
+                        join activity_taps tap on tap.id = tc.tap_id
+                        join activity_instances ai on ai.id = tap.activity_instance_id
+                        left join activity_instance_challenge_config cfg on cfg.activity_instance_id = ai.id
+                        left join activity_templates at on at.id = ai.activity_template_id
+                        left join (
+                            select tap_card_id, count(*) as like_count
+                            from tap_card_likes
+                            group by tap_card_id
+                        ) lc on lc.tap_card_id = tc.id
+                        left join (
+                            select tap_card_id, count(*) as reply_count
+                            from tap_card_replies
+                            where status = 'VISIBLE' and deleted_at is null
+                            group by tap_card_id
+                        ) rc on rc.tap_card_id = tc.id
+                        where ai.created_by = :userId
+                            and tc.deleted_at is null
+                            and ai.deleted_at is null
+                        order by tc.updated_at desc
+                        limit :limit
+                    )
+                    select
+                        card_id as "cardId",
+                        tap_id as "tapId",
+                        activity_instance_id as "activityInstanceId",
+                        activity_template_id as "activityTemplateId",
+                        instance_title as "instanceTitle",
+                        template_status as "templateStatus",
+                        note as "note",
+                        photo_path as "photoPath",
+                        fail_card_fee_minor as "failCardFeeMinor",
+                        challenger_final_verdict as "challengerFinalVerdict",
+                        instance_state as "instanceState",
+                        ref_verdict as "refVerdict",
+                        like_count as "likeCount",
+                        reply_count as "replyCount",
+                        sort_updated_at as "sortUpdatedAt"
+                    from candidates
+                    order by sort_updated_at desc, card_id
+                    """,
+            nativeQuery = true
+    )
+    List<PersonalFeedRow> findPersonalFeed(
+            @Param("userId") UUID userId,
+            @Param("limit") int limit
+    );
 }

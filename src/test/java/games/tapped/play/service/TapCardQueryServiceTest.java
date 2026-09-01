@@ -1,9 +1,12 @@
 package games.tapped.play.service;
 
+import games.tapped.play.dto.ChallengeProcessStatus;
 import games.tapped.play.dto.LeaderboardResult;
+import games.tapped.play.dto.PersonalFeedResponse;
 import games.tapped.play.dto.TapCardLeaderboardEntry;
 import games.tapped.play.dto.TapCardLeaderboardResponse;
 import games.tapped.play.dto.TapCardLikeStatsResponse;
+import games.tapped.play.repository.PersonalFeedRow;
 import games.tapped.play.repository.TapCardLeaderboardRow;
 import games.tapped.play.repository.TapCardLikeCountRow;
 import games.tapped.play.repository.TapCardLikeRepository;
@@ -171,5 +174,107 @@ class TapCardQueryServiceTest {
                 .toList();
 
         assertThrows(IllegalArgumentException.class, () -> service.getLikeStats(tooMany, null));
+    }
+
+    private PersonalFeedRow personalFeedRow(
+            UUID cardId,
+            String challengerFinalVerdict,
+            String instanceState,
+            String refVerdict
+    ) {
+        PersonalFeedRow row = mock(PersonalFeedRow.class);
+        given(row.getCardId()).willReturn(cardId);
+        given(row.getActivityInstanceId()).willReturn(UUID.randomUUID());
+        given(row.getActivityTemplateId()).willReturn(UUID.randomUUID());
+        given(row.getInstanceTitle()).willReturn("Run every day");
+        given(row.getTemplateStatus()).willReturn(null);
+        given(row.getNote()).willReturn("note");
+        given(row.getPhotoPath()).willReturn(null);
+        given(row.getFailCardFeeMinor()).willReturn(0);
+        given(row.getChallengerFinalVerdict()).willReturn(challengerFinalVerdict);
+        given(row.getInstanceState()).willReturn(instanceState);
+        given(row.getRefVerdict()).willReturn(refVerdict);
+        given(row.getLikeCount()).willReturn(2L);
+        given(row.getReplyCount()).willReturn(1L);
+        given(row.getSortUpdatedAt()).willReturn(Instant.parse("2026-01-01T00:00:00Z"));
+        return row;
+    }
+
+    @Test
+    void personalFeedDelegatesToRepositoryWithMaxEntriesForCurrentUser() {
+        UUID userId = UUID.randomUUID();
+        given(tapCardRepository.findPersonalFeed(userId, TapCardQueryService.MAX_PERSONAL_FEED_ENTRIES))
+                .willReturn(List.of());
+
+        service.getPersonalFeed(userId);
+
+        verify(tapCardRepository).findPersonalFeed(userId, TapCardQueryService.MAX_PERSONAL_FEED_ENTRIES);
+    }
+
+    @Test
+    void personalFeedReturnsEmptyItemsWhenNoCards() {
+        UUID userId = UUID.randomUUID();
+        given(tapCardRepository.findPersonalFeed(eq(userId), any(Integer.class))).willReturn(List.of());
+
+        PersonalFeedResponse response = service.getPersonalFeed(userId);
+
+        assertTrue(response.items().isEmpty());
+    }
+
+    @Test
+    void personalFeedMapsChallengerFinalVerdictToCompletedStatusAndResult() {
+        UUID userId = UUID.randomUUID();
+        UUID cardId = UUID.randomUUID();
+        PersonalFeedRow row = personalFeedRow(cardId, "FAIL", "COMPLETED", "FAIL");
+        given(tapCardRepository.findPersonalFeed(eq(userId), any(Integer.class)))
+                .willReturn(List.of(row));
+
+        PersonalFeedResponse response = service.getPersonalFeed(userId);
+
+        assertEquals(1, response.items().size());
+        assertEquals(ChallengeProcessStatus.COMPLETED_FAIL, response.items().get(0).status());
+        assertEquals("FAIL", response.items().get(0).result());
+    }
+
+    @Test
+    void personalFeedMapsDisputeVerdictToDisagreeResult() {
+        UUID userId = UUID.randomUUID();
+        UUID cardId = UUID.randomUUID();
+        PersonalFeedRow row = personalFeedRow(cardId, "DISPUTE", "COMPLETED", "FAIL");
+        given(tapCardRepository.findPersonalFeed(eq(userId), any(Integer.class)))
+                .willReturn(List.of(row));
+
+        PersonalFeedResponse response = service.getPersonalFeed(userId);
+
+        assertEquals(ChallengeProcessStatus.COMPLETED_DISPUTE, response.items().get(0).status());
+        assertEquals("DISAGREE", response.items().get(0).result());
+    }
+
+    @Test
+    void personalFeedWaitingForRefDecisionWhenActiveWithNoVerdicts() {
+        UUID userId = UUID.randomUUID();
+        UUID cardId = UUID.randomUUID();
+        PersonalFeedRow row = personalFeedRow(cardId, null, "ACTIVE", null);
+        given(tapCardRepository.findPersonalFeed(eq(userId), any(Integer.class)))
+                .willReturn(List.of(row));
+
+        PersonalFeedResponse response = service.getPersonalFeed(userId);
+
+        assertEquals(ChallengeProcessStatus.WAITING_FOR_REF_DECISION, response.items().get(0).status());
+        assertEquals(null, response.items().get(0).result());
+    }
+
+    @Test
+    void personalFeedIncludesLikeAndReplyCounts() {
+        UUID userId = UUID.randomUUID();
+        UUID cardId = UUID.randomUUID();
+        PersonalFeedRow row = personalFeedRow(cardId, null, "ACTIVE", null);
+        given(tapCardRepository.findPersonalFeed(eq(userId), any(Integer.class)))
+                .willReturn(List.of(row));
+
+        PersonalFeedResponse response = service.getPersonalFeed(userId);
+
+        assertEquals(2L, response.items().get(0).likeCount());
+        assertEquals(1L, response.items().get(0).replyCount());
     }
 }

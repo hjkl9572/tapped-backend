@@ -43,6 +43,11 @@ public class SecurityConfig {
                                 "/api/instances/ref-decisions/session"
                         ).permitAll()
                         .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/profiles/by-handle/**",
+                                "/api/profiles/handles/*/availability"
+                        ).permitAll()
+                        .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/instances/ref-decisions"
                         ).permitAll()

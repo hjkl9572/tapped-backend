@@ -393,4 +393,112 @@ class TapCardRepositoryTest {
         }
         throw new AssertionError("card not found in leaderboard rows: " + cardId);
     }
+
+    private void softDeleteCard(UUID cardId) {
+        entityManager.createNativeQuery("update tap_cards set deleted_at = now() where id = :id")
+                .setParameter("id", cardId)
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.clear();
+    }
+
+    @Test
+    void personalFeedReturnsOnlyCardsOwnedByRequestedUser() {
+        UUID owner = newOwner();
+        UUID other = newOwner();
+        UUID ownedCard = createCard(
+                owner, null, TemplateVisibility.PUBLIC, TemplateLifecycleState.PUBLISHED, false, 0
+        );
+        UUID othersCard = createCard(
+                other, null, TemplateVisibility.PUBLIC, TemplateLifecycleState.PUBLISHED, false, 0
+        );
+
+        List<PersonalFeedRow> rows = tapCardRepository.findPersonalFeed(owner, 120);
+
+        assertTrue(rows.stream().anyMatch(r -> r.getCardId().equals(ownedCard)));
+        assertTrue(rows.stream().noneMatch(r -> r.getCardId().equals(othersCard)));
+    }
+
+    @Test
+    void personalFeedIncludesCardsRegardlessOfTemplateVisibilityOrInstanceState() {
+        UUID owner = newOwner();
+        UUID draftPrivateActiveCard = createCard(
+                owner, null, TemplateVisibility.PRIVATE, TemplateLifecycleState.DRAFT, false, 0
+        );
+
+        List<PersonalFeedRow> rows = tapCardRepository.findPersonalFeed(owner, 120);
+
+        assertTrue(rows.stream().anyMatch(r -> r.getCardId().equals(draftPrivateActiveCard)));
+    }
+
+    @Test
+    void personalFeedExcludesSoftDeletedCards() {
+        UUID owner = newOwner();
+        UUID deletedCard = createCard(
+                owner, null, TemplateVisibility.PUBLIC, TemplateLifecycleState.PUBLISHED, false, 0
+        );
+        softDeleteCard(deletedCard);
+
+        List<PersonalFeedRow> rows = tapCardRepository.findPersonalFeed(owner, 120);
+
+        assertTrue(rows.stream().noneMatch(r -> r.getCardId().equals(deletedCard)));
+    }
+
+    @Test
+    void personalFeedReturnsEmptyWhenUserHasNoCards() {
+        UUID owner = newOwner();
+
+        List<PersonalFeedRow> rows = tapCardRepository.findPersonalFeed(owner, 120);
+
+        assertTrue(rows.isEmpty());
+    }
+
+    @Test
+    void personalFeedOrdersByMostRecentActivityDescending() {
+        UUID owner = newOwner();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        UUID older = createCard(
+                owner, null, TemplateVisibility.PUBLIC, TemplateLifecycleState.PUBLISHED,
+                false, 0, now.minusDays(1)
+        );
+        UUID newer = createCard(
+                owner, null, TemplateVisibility.PUBLIC, TemplateLifecycleState.PUBLISHED, false, 0, now
+        );
+
+        List<PersonalFeedRow> rows = tapCardRepository.findPersonalFeed(owner, 120);
+
+        int newerIndex = indexOfPersonalFeedCard(rows, newer);
+        int olderIndex = indexOfPersonalFeedCard(rows, older);
+        assertTrue(newerIndex < olderIndex, "more recently updated card should sort first");
+    }
+
+    @Test
+    void personalFeedProjectionIncludesLikeAndReplyCountsAndChallengeFields() {
+        UUID owner = newOwner();
+        UUID cardId = createEligibleCard(owner, ActivityChallengerFinalVerdict.FAIL, 500);
+        likeCard(cardId, 2);
+        addReply(cardId, newOwner(), "VISIBLE", false);
+        entityManager.flush();
+
+        PersonalFeedRow row = tapCardRepository.findPersonalFeed(owner, 120).stream()
+                .filter(r -> r.getCardId().equals(cardId))
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(2L, row.getLikeCount());
+        assertEquals(1L, row.getReplyCount());
+        assertEquals("FAIL", row.getChallengerFinalVerdict());
+        assertEquals("COMPLETED", row.getInstanceState());
+        assertEquals(500, row.getFailCardFeeMinor());
+        assertEquals("note", row.getNote());
+    }
+
+    private int indexOfPersonalFeedCard(List<PersonalFeedRow> rows, UUID cardId) {
+        for (int i = 0; i < rows.size(); i++) {
+            if (rows.get(i).getCardId().equals(cardId)) {
+                return i;
+            }
+        }
+        throw new AssertionError("card not found in personal feed rows: " + cardId);
+    }
 }

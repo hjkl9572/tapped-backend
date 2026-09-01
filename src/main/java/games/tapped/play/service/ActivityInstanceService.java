@@ -724,62 +724,13 @@ public class ActivityInstanceService {
             ActivityTemplate template,
             ActivityInstanceChallengeConfig config
     ) {
-        if (instance.getDeletedAt() != null) {
-            return ChallengeProcessStatus.TERMINATED;
-        }
-        if (config != null && config.getChallengerFinalVerdict() != null) {
-            return switch (config.getChallengerFinalVerdict()) {
-                case SUCCESS -> ChallengeProcessStatus.COMPLETED_SUCCESS;
-                case FAIL -> ChallengeProcessStatus.COMPLETED_FAIL;
-                case CHICKEN -> ChallengeProcessStatus.COMPLETED_CHICKEN;
-                case DISPUTE -> ChallengeProcessStatus.COMPLETED_DISPUTE;
-            };
-        }
-        ChallengeProcessStatus legacyStatus = mapLegacyTemplateStatus(template);
-        if (legacyStatus == ChallengeProcessStatus.COMPLETED_SUCCESS
-                || legacyStatus == ChallengeProcessStatus.COMPLETED_FAIL
-                || legacyStatus == ChallengeProcessStatus.COMPLETED_DISPUTE) {
-            return legacyStatus;
-        }
-        if (instance.getState() == ActivityInstanceState.COMPLETED) {
-            return config != null && config.getRefVerdict() == ActivityRefVerdict.FAIL
-                    ? ChallengeProcessStatus.COMPLETED_FAIL
-                    : ChallengeProcessStatus.COMPLETED_SUCCESS;
-        }
-        if (instance.getState() == ActivityInstanceState.TERMINATED) {
-            return config != null && config.getRefVerdict() == ActivityRefVerdict.FAIL
-                    ? ChallengeProcessStatus.COMPLETED_FAIL
-                    : ChallengeProcessStatus.TERMINATED;
-        }
-        if (config != null && config.getRefVerdict() == ActivityRefVerdict.SUCCESS) {
-            return ChallengeProcessStatus.REF_DECIDED_SUCCESS;
-        }
-        if (config != null && config.getRefVerdict() == ActivityRefVerdict.FAIL) {
-            return ChallengeProcessStatus.REF_DECIDED_FAIL;
-        }
-        if (legacyStatus != null) {
-            return legacyStatus;
-        }
-
-        return ChallengeProcessStatus.WAITING_FOR_REF_DECISION;
-    }
-
-    private ChallengeProcessStatus mapLegacyTemplateStatus(ActivityTemplate template) {
-        if (template == null || template.getStatus() == null) {
-            return null;
-        }
-
-        return switch (template.getStatus().trim()) {
-            case "MAIL_FAILED", "MAIL_SENT", "MAIL_QUEUED" ->
-                    ChallengeProcessStatus.WAITING_FOR_REF_DECISION;
-            case "WATCHER_MARKED_SUCCESS" -> ChallengeProcessStatus.REF_DECIDED_SUCCESS;
-            case "WATCHER_MARKED_FAIL" -> ChallengeProcessStatus.REF_DECIDED_FAIL;
-            case "CHALLENGER_FINAL_SUCCESS" -> ChallengeProcessStatus.COMPLETED_SUCCESS;
-            case "CHALLENGER_FINAL_FAIL" -> ChallengeProcessStatus.COMPLETED_FAIL;
-            case "CHALLENGER_FINAL_DISAGREE" -> ChallengeProcessStatus.COMPLETED_DISPUTE;
-            case "CANCELLED" -> ChallengeProcessStatus.TERMINATED;
-            default -> null;
-        };
+        return ChallengeStatusDeriver.deriveStatus(
+                instance.getDeletedAt(),
+                config == null ? null : config.getChallengerFinalVerdict(),
+                template == null ? null : template.getStatus(),
+                instance.getState(),
+                config == null ? null : config.getRefVerdict()
+        );
     }
 
     private Map<String, Object> buildFinalCallProjection(

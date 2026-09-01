@@ -1,6 +1,7 @@
 package games.tapped.play.controller;
 
 import games.tapped.play.dto.LeaderboardResult;
+import games.tapped.play.dto.PersonalFeedResponse;
 import games.tapped.play.dto.TapCardLeaderboardResponse;
 import games.tapped.play.dto.TapCardLikeResponse;
 import games.tapped.play.dto.TapCardLikeStatsResponse;
@@ -31,6 +32,11 @@ public class TapCardController {
     @GetMapping("/leaderboard")
     public TapCardLeaderboardResponse getLeaderboard(@RequestParam LeaderboardResult result) {
         return queryService.getLeaderboard(result);
+    }
+
+    @GetMapping("/personal-feed")
+    public PersonalFeedResponse getPersonalFeed(@AuthenticationPrincipal AppJwtPrincipal principal) {
+        return queryService.getPersonalFeed(principal.userId());
     }
 
     @GetMapping("/like-stats")

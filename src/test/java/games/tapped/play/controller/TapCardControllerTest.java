@@ -1,6 +1,9 @@
 package games.tapped.play.controller;
 
+import games.tapped.play.dto.ChallengeProcessStatus;
 import games.tapped.play.dto.LeaderboardResult;
+import games.tapped.play.dto.PersonalFeedItem;
+import games.tapped.play.dto.PersonalFeedResponse;
 import games.tapped.play.dto.TapCardLeaderboardEntry;
 import games.tapped.play.dto.TapCardLeaderboardResponse;
 import games.tapped.play.dto.TapCardLikeResponse;
@@ -211,5 +214,42 @@ class TapCardControllerTest {
     void malformedLikeStatsIdReturnsBadRequest() throws Exception {
         mockMvc.perform(get("/api/tap-cards/like-stats").param("ids", "not-a-uuid"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void authenticatedUserCanGetPersonalFeed() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID cardId = UUID.randomUUID();
+        given(queryService.getPersonalFeed(userId)).willReturn(new PersonalFeedResponse(List.of(
+                new PersonalFeedItem(
+                        cardId, UUID.randomUUID(), UUID.randomUUID(), "Instance", "note", null,
+                        0, "USD", ChallengeProcessStatus.WAITING_FOR_REF_DECISION, null, 2, 1,
+                        java.time.OffsetDateTime.parse("2026-01-01T00:00:00Z")
+                )
+        )));
+
+        mockMvc.perform(get("/api/tap-cards/personal-feed")
+                        .with(authentication(authenticationFor(userId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].cardId").value(cardId.toString()));
+
+        verify(queryService).getPersonalFeed(userId);
+    }
+
+    @Test
+    void anonymousUserCannotGetPersonalFeed() throws Exception {
+        mockMvc.perform(get("/api/tap-cards/personal-feed"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void emptyPersonalFeedReturnsEmptyItems() throws Exception {
+        UUID userId = UUID.randomUUID();
+        given(queryService.getPersonalFeed(userId)).willReturn(new PersonalFeedResponse(List.of()));
+
+        mockMvc.perform(get("/api/tap-cards/personal-feed")
+                        .with(authentication(authenticationFor(userId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items").isEmpty());
     }
 }
