@@ -2,11 +2,16 @@ package games.tapped.play.controller;
 
 import games.tapped.play.dto.CreateInstanceRequest;
 import games.tapped.play.dto.CreateInstanceResponse;
+import games.tapped.play.dto.InstanceDashboardItem;
+import games.tapped.play.dto.InstanceDashboardResponse;
 import games.tapped.play.dto.PlayInstanceSummaryResponse;
 import games.tapped.play.dto.RefDecisionRequest;
 import games.tapped.play.dto.ToggleTapData;
 import games.tapped.play.dto.ToggleTapResponse;
+import games.tapped.play.entity.ActivityModeKind;
 import games.tapped.play.entity.ActivityTapState;
+import games.tapped.play.entity.TemplatePlayContext;
+import games.tapped.play.entity.TemplateRelationshipMode;
 import games.tapped.play.service.ActivityInstanceService;
 import games.tapped.security.AppJwtPrincipal;
 import org.junit.jupiter.api.Test;
@@ -185,6 +190,54 @@ class InstanceControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ok").value(true))
                 .andExpect(jsonPath("$.activityInstanceId").value(instanceId.toString()));
+    }
+
+    @Test
+    void authenticatedUserCanGetDashboard() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID instanceId = UUID.randomUUID();
+
+        given(activityInstanceService.getDashboard(userId))
+                .willReturn(new InstanceDashboardResponse(List.of(
+                        new InstanceDashboardItem(
+                                instanceId, ActivityModeKind.CHALLENGE, "Run every day",
+                                "Run at least 20 minutes", null,
+                                TemplatePlayContext.ONLINE, TemplateRelationshipMode.SOLO, "ANY",
+                                java.time.OffsetDateTime.parse("2026-01-01T00:00:00Z"),
+                                java.time.OffsetDateTime.parse("2026-01-01T00:00:00Z"),
+                                null
+                        )
+                )));
+
+        mockMvc.perform(
+                        get("/api/instances/dashboard")
+                                .with(authentication(auth(userId)))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value(instanceId.toString()))
+                .andExpect(jsonPath("$.items[0].title").value("Run every day"));
+
+        verify(activityInstanceService).getDashboard(userId);
+    }
+
+    @Test
+    void anonymousUserCannotGetDashboard() throws Exception {
+        mockMvc.perform(get("/api/instances/dashboard"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void emptyDashboardReturnsEmptyItems() throws Exception {
+        UUID userId = UUID.randomUUID();
+        given(activityInstanceService.getDashboard(userId))
+                .willReturn(new InstanceDashboardResponse(List.of()));
+
+        mockMvc.perform(
+                        get("/api/instances/dashboard")
+                                .with(authentication(auth(userId)))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items").isEmpty());
     }
 
     private UsernamePasswordAuthenticationToken auth(UUID userId) {

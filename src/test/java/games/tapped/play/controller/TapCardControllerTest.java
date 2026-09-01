@@ -4,11 +4,14 @@ import games.tapped.play.dto.ChallengeProcessStatus;
 import games.tapped.play.dto.LeaderboardResult;
 import games.tapped.play.dto.PersonalFeedItem;
 import games.tapped.play.dto.PersonalFeedResponse;
+import games.tapped.play.dto.PlayInstanceTemplateSummary;
 import games.tapped.play.dto.TapCardLeaderboardEntry;
 import games.tapped.play.dto.TapCardLeaderboardResponse;
 import games.tapped.play.dto.TapCardLikeResponse;
 import games.tapped.play.dto.TapCardLikeStatsEntry;
 import games.tapped.play.dto.TapCardLikeStatsResponse;
+import games.tapped.play.dto.TapCardTrayItem;
+import games.tapped.play.dto.TapCardTrayResponse;
 import games.tapped.play.service.TapCardLikeService;
 import games.tapped.play.service.TapCardQueryService;
 import games.tapped.security.AppJwtPrincipal;
@@ -248,6 +251,45 @@ class TapCardControllerTest {
         given(queryService.getPersonalFeed(userId)).willReturn(new PersonalFeedResponse(List.of()));
 
         mockMvc.perform(get("/api/tap-cards/personal-feed")
+                        .with(authentication(authenticationFor(userId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items").isEmpty());
+    }
+
+    @Test
+    void authenticatedUserCanGetTray() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID cardId = UUID.randomUUID();
+        given(queryService.getTray(userId)).willReturn(new TapCardTrayResponse(List.of(
+                new TapCardTrayItem(
+                        cardId, UUID.randomUUID(), UUID.randomUUID(), "note", null,
+                        java.time.OffsetDateTime.parse("2026-01-01T00:00:00Z"),
+                        new PlayInstanceTemplateSummary(UUID.randomUUID(), "Run every day", "Rules", null),
+                        3, 2
+                )
+        )));
+
+        mockMvc.perform(get("/api/tap-cards/tray")
+                        .with(authentication(authenticationFor(userId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value(cardId.toString()))
+                .andExpect(jsonPath("$.items[0].template.title").value("Run every day"));
+
+        verify(queryService).getTray(userId);
+    }
+
+    @Test
+    void anonymousUserCannotGetTray() throws Exception {
+        mockMvc.perform(get("/api/tap-cards/tray"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void emptyTrayReturnsEmptyItems() throws Exception {
+        UUID userId = UUID.randomUUID();
+        given(queryService.getTray(userId)).willReturn(new TapCardTrayResponse(List.of()));
+
+        mockMvc.perform(get("/api/tap-cards/tray")
                         .with(authentication(authenticationFor(userId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items").isEmpty());

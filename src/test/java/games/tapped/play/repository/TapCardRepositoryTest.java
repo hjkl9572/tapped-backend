@@ -501,4 +501,127 @@ class TapCardRepositoryTest {
         }
         throw new AssertionError("card not found in personal feed rows: " + cardId);
     }
+
+    @Test
+    void trayReturnsOnlyCardsOwnedByRequestedUser() {
+        UUID owner = newOwner();
+        UUID other = newOwner();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        UUID ownedCard = createCard(
+                owner, null, TemplateVisibility.PUBLIC, TemplateLifecycleState.PUBLISHED, false, 0, now
+        );
+        UUID othersCard = createCard(
+                other, null, TemplateVisibility.PUBLIC, TemplateLifecycleState.PUBLISHED, false, 0, now
+        );
+
+        List<TapCardTrayRow> rows = tapCardRepository.findTodayTray(owner, 24);
+
+        assertTrue(rows.stream().anyMatch(r -> r.getId().equals(ownedCard)));
+        assertTrue(rows.stream().noneMatch(r -> r.getId().equals(othersCard)));
+    }
+
+    @Test
+    void trayExcludesCardsNotCreatedToday() {
+        UUID owner = newOwner();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        UUID todayCard = createCard(
+                owner, null, TemplateVisibility.PUBLIC, TemplateLifecycleState.PUBLISHED, false, 0, now
+        );
+        UUID oldCard = createCard(
+                owner, null, TemplateVisibility.PUBLIC, TemplateLifecycleState.PUBLISHED,
+                false, 0, now.minusDays(2)
+        );
+
+        List<TapCardTrayRow> rows = tapCardRepository.findTodayTray(owner, 24);
+
+        assertTrue(rows.stream().anyMatch(r -> r.getId().equals(todayCard)));
+        assertTrue(rows.stream().noneMatch(r -> r.getId().equals(oldCard)));
+    }
+
+    @Test
+    void trayExcludesSoftDeletedCards() {
+        UUID owner = newOwner();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        UUID cardId = createCard(
+                owner, null, TemplateVisibility.PUBLIC, TemplateLifecycleState.PUBLISHED, false, 0, now
+        );
+        softDeleteCard(cardId);
+
+        List<TapCardTrayRow> rows = tapCardRepository.findTodayTray(owner, 24);
+
+        assertTrue(rows.stream().noneMatch(r -> r.getId().equals(cardId)));
+    }
+
+    @Test
+    void trayReturnsEmptyWhenUserHasNoCardsToday() {
+        UUID owner = newOwner();
+
+        List<TapCardTrayRow> rows = tapCardRepository.findTodayTray(owner, 24);
+
+        assertTrue(rows.isEmpty());
+    }
+
+    @Test
+    void trayOrdersByCreatedAtDescending() {
+        UUID owner = newOwner();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        UUID older = createCard(
+                owner, null, TemplateVisibility.PUBLIC, TemplateLifecycleState.PUBLISHED,
+                false, 0, now.minusMinutes(30)
+        );
+        UUID newer = createCard(
+                owner, null, TemplateVisibility.PUBLIC, TemplateLifecycleState.PUBLISHED, false, 0, now
+        );
+
+        List<TapCardTrayRow> rows = tapCardRepository.findTodayTray(owner, 24);
+
+        int newerIndex = indexOfTrayCard(rows, newer);
+        int olderIndex = indexOfTrayCard(rows, older);
+        assertTrue(newerIndex < olderIndex, "more recently created card should sort first");
+    }
+
+    @Test
+    void trayRespectsTheRequestedLimit() {
+        UUID owner = newOwner();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        for (int i = 0; i < 3; i++) {
+            createCard(owner, null, TemplateVisibility.PUBLIC, TemplateLifecycleState.PUBLISHED, false, 0, now);
+        }
+
+        List<TapCardTrayRow> rows = tapCardRepository.findTodayTray(owner, 2);
+
+        assertEquals(2, rows.size());
+    }
+
+    @Test
+    void trayProjectionIncludesTemplateAndCounts() {
+        UUID owner = newOwner();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        UUID cardId = createCard(
+                owner, null, TemplateVisibility.PUBLIC, TemplateLifecycleState.PUBLISHED, false, 0, now
+        );
+        likeCard(cardId, 2);
+        addReply(cardId, newOwner(), "VISIBLE", false);
+        entityManager.flush();
+
+        TapCardTrayRow row = tapCardRepository.findTodayTray(owner, 24).stream()
+                .filter(r -> r.getId().equals(cardId))
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals("note", row.getNote());
+        assertEquals(2L, row.getLikeCount());
+        assertEquals(1L, row.getReplyCount());
+        assertTrue(row.getTemplateId() != null);
+        assertEquals("Run every day", row.getTemplateTitle());
+    }
+
+    private int indexOfTrayCard(List<TapCardTrayRow> rows, UUID cardId) {
+        for (int i = 0; i < rows.size(); i++) {
+            if (rows.get(i).getId().equals(cardId)) {
+                return i;
+            }
+        }
+        throw new AssertionError("card not found in tray rows: " + cardId);
+    }
 }

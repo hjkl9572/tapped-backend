@@ -217,4 +217,51 @@ public interface TapCardRepository
             @Param("userId") UUID userId,
             @Param("limit") int limit
     );
+
+    @Query(
+            value = """
+                    with tap_day_window as (
+                        select (now() at time zone 'America/New_York')::date as tap_day
+                    )
+                    select
+                        tc.id as id,
+                        tc.activity_instance_id as activity_instance_id,
+                        tc.tap_id as tap_id,
+                        tc.note as note,
+                        coalesce(tc.photo_path, at.photo_path) as photo_path,
+                        tc.created_at as created_at,
+                        at.id as template_id,
+                        at.title as template_title,
+                        at.rules as template_rules,
+                        at.photo_path as template_photo_path,
+                        coalesce(lc.like_count, 0) as like_count,
+                        coalesce(rc.reply_count, 0) as reply_count
+                    from tap_cards tc
+                    join activity_instances ai on ai.id = tc.activity_instance_id
+                    join tap_day_window tdw on true
+                    left join activity_templates at on at.id = ai.activity_template_id and at.deleted_at is null
+                    left join (
+                        select tap_card_id, count(*) as like_count
+                        from tap_card_likes
+                        group by tap_card_id
+                    ) lc on lc.tap_card_id = tc.id
+                    left join (
+                        select tap_card_id, count(*) as reply_count
+                        from tap_card_replies
+                        where status = 'VISIBLE' and deleted_at is null
+                        group by tap_card_id
+                    ) rc on rc.tap_card_id = tc.id
+                    where ai.created_by = :userId
+                        and tc.deleted_at is null
+                        and ai.deleted_at is null
+                        and (tc.created_at at time zone 'America/New_York')::date = tdw.tap_day
+                    order by tc.created_at desc, tc.id desc
+                    limit :limit
+                    """,
+            nativeQuery = true
+    )
+    List<TapCardTrayRow> findTodayTray(
+            @Param("userId") UUID userId,
+            @Param("limit") int limit
+    );
 }

@@ -2,6 +2,7 @@ package games.tapped.play.service;
 
 import games.tapped.play.dto.CreateInstanceRequest;
 import games.tapped.play.dto.CreateInstanceResponse;
+import games.tapped.play.dto.InstanceDashboardResponse;
 import games.tapped.play.dto.TemplateScheduleRequest;
 import games.tapped.play.dto.ToggleTapResponse;
 import games.tapped.play.entity.ActivityInstance;
@@ -20,6 +21,7 @@ import games.tapped.play.repository.ActivityInstanceChallengeMailTokenRepository
 import games.tapped.play.repository.ActivityInstanceRepository;
 import games.tapped.play.repository.ActivityTapRepository;
 import games.tapped.play.repository.ActivityTemplateRepository;
+import games.tapped.play.repository.InstanceDashboardRow;
 import games.tapped.play.repository.TapCardRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,15 +31,19 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -216,6 +222,81 @@ class ActivityInstanceServiceTest {
         verify(tapRepository).save(tapCaptor.capture());
         assertEquals(userId, tapCaptor.getValue().getTappedBy());
         assertEquals(instance.getId(), tapCaptor.getValue().getActivityInstanceId());
+    }
+
+    @Test
+    void dashboardDelegatesToRepositoryForCurrentUser() {
+        UUID userId = UUID.randomUUID();
+        given(instanceRepository.findDashboardInstances(userId)).willReturn(List.of());
+
+        service.getDashboard(userId);
+
+        verify(instanceRepository).findDashboardInstances(userId);
+    }
+
+    @Test
+    void dashboardReturnsEmptyItemsWhenNothingEligible() {
+        UUID userId = UUID.randomUUID();
+        given(instanceRepository.findDashboardInstances(userId)).willReturn(List.of());
+
+        InstanceDashboardResponse response = service.getDashboard(userId);
+
+        assertTrue(response.items().isEmpty());
+    }
+
+    @Test
+    void dashboardMapsRowWithLatestTap() {
+        UUID userId = UUID.randomUUID();
+        UUID instanceId = UUID.randomUUID();
+        UUID tapId = UUID.randomUUID();
+        InstanceDashboardRow row = mock(InstanceDashboardRow.class);
+        given(row.getId()).willReturn(instanceId);
+        given(row.getModeKind()).willReturn("CHALLENGE");
+        given(row.getTitle()).willReturn("Run every day");
+        given(row.getRules()).willReturn("Run at least 20 minutes");
+        given(row.getPhotoPath()).willReturn(null);
+        given(row.getPlayContext()).willReturn("ONLINE");
+        given(row.getRelationshipMode()).willReturn("SOLO");
+        given(row.getProofKind()).willReturn("ANY");
+        given(row.getStartedAt()).willReturn(Instant.parse("2026-01-01T00:00:00Z"));
+        given(row.getUpdatedAt()).willReturn(Instant.parse("2026-01-01T01:00:00Z"));
+        given(row.getLatestTapId()).willReturn(tapId);
+        given(row.getLatestTapState()).willReturn("OPENED");
+        given(row.getLatestTapSequenceNo()).willReturn(1);
+        given(row.getLatestTapFirstHappenedAt()).willReturn(Instant.parse("2026-01-01T01:00:00Z"));
+        given(row.getLatestTapFinalizedAt()).willReturn(null);
+        given(row.getLatestTapCanceledAt()).willReturn(null);
+        given(instanceRepository.findDashboardInstances(userId)).willReturn(List.of(row));
+
+        InstanceDashboardResponse response = service.getDashboard(userId);
+
+        assertEquals(1, response.items().size());
+        assertEquals(instanceId, response.items().get(0).id());
+        assertEquals("Run every day", response.items().get(0).title());
+        assertEquals(tapId, response.items().get(0).latestTap().id());
+        assertEquals(ActivityTapState.OPENED, response.items().get(0).latestTap().state());
+    }
+
+    @Test
+    void dashboardMapsRowWithNoTapToNullLatestTap() {
+        UUID userId = UUID.randomUUID();
+        InstanceDashboardRow row = mock(InstanceDashboardRow.class);
+        given(row.getId()).willReturn(UUID.randomUUID());
+        given(row.getModeKind()).willReturn("CHALLENGE");
+        given(row.getTitle()).willReturn("Run every day");
+        given(row.getRules()).willReturn("Rules");
+        given(row.getPhotoPath()).willReturn(null);
+        given(row.getPlayContext()).willReturn("ONLINE");
+        given(row.getRelationshipMode()).willReturn("SOLO");
+        given(row.getProofKind()).willReturn("ANY");
+        given(row.getStartedAt()).willReturn(Instant.parse("2026-01-01T00:00:00Z"));
+        given(row.getUpdatedAt()).willReturn(Instant.parse("2026-01-01T00:00:00Z"));
+        given(row.getLatestTapId()).willReturn(null);
+        given(instanceRepository.findDashboardInstances(userId)).willReturn(List.of(row));
+
+        InstanceDashboardResponse response = service.getDashboard(userId);
+
+        assertNull(response.items().get(0).latestTap());
     }
 
     private ActivityTemplate publishedTemplate(UUID templateId, UUID userId) {

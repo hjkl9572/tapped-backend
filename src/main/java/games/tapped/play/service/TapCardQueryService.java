@@ -6,8 +6,11 @@ import games.tapped.play.dto.PersonalFeedItem;
 import games.tapped.play.dto.PersonalFeedResponse;
 import games.tapped.play.dto.TapCardLeaderboardEntry;
 import games.tapped.play.dto.TapCardLeaderboardResponse;
+import games.tapped.play.dto.PlayInstanceTemplateSummary;
 import games.tapped.play.dto.TapCardLikeStatsEntry;
 import games.tapped.play.dto.TapCardLikeStatsResponse;
+import games.tapped.play.dto.TapCardTrayItem;
+import games.tapped.play.dto.TapCardTrayResponse;
 import games.tapped.play.entity.ActivityChallengerFinalVerdict;
 import games.tapped.play.entity.ActivityInstanceState;
 import games.tapped.play.entity.ActivityRefVerdict;
@@ -16,6 +19,7 @@ import games.tapped.play.repository.TapCardLeaderboardRow;
 import games.tapped.play.repository.TapCardLikeCountRow;
 import games.tapped.play.repository.TapCardLikeRepository;
 import games.tapped.play.repository.TapCardRepository;
+import games.tapped.play.repository.TapCardTrayRow;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +40,7 @@ public class TapCardQueryService {
     public static final int MAX_LEADERBOARD_ENTRIES = 30;
     public static final int MAX_LIKE_STATS_BATCH_SIZE = 100;
     public static final int MAX_PERSONAL_FEED_ENTRIES = 120;
+    public static final int MAX_TRAY_ENTRIES = 24;
 
     private final TapCardRepository tapCardRepository;
     private final TapCardLikeRepository tapCardLikeRepository;
@@ -143,6 +148,39 @@ public class TapCardQueryService {
             case CHICKEN -> "CHICKEN";
             case DISPUTE -> "DISAGREE";
         };
+    }
+
+    @Transactional(readOnly = true)
+    public TapCardTrayResponse getTray(UUID userId) {
+        return new TapCardTrayResponse(
+                tapCardRepository.findTodayTray(userId, MAX_TRAY_ENTRIES)
+                        .stream()
+                        .map(this::toTrayItem)
+                        .toList()
+        );
+    }
+
+    private TapCardTrayItem toTrayItem(TapCardTrayRow row) {
+        PlayInstanceTemplateSummary template = row.getTemplateId() == null
+                ? null
+                : new PlayInstanceTemplateSummary(
+                        row.getTemplateId(),
+                        row.getTemplateTitle(),
+                        row.getTemplateRules(),
+                        row.getTemplatePhotoPath()
+                );
+
+        return new TapCardTrayItem(
+                row.getId(),
+                row.getActivityInstanceId(),
+                row.getTapId(),
+                row.getNote(),
+                row.getPhotoPath(),
+                row.getCreatedAt() == null ? null : row.getCreatedAt().atOffset(ZoneOffset.UTC),
+                template,
+                row.getLikeCount(),
+                row.getReplyCount()
+        );
     }
 
     private TapCardLeaderboardEntry toEntry(TapCardLeaderboardRow row) {

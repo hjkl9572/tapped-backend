@@ -6,11 +6,13 @@ import games.tapped.play.dto.PersonalFeedResponse;
 import games.tapped.play.dto.TapCardLeaderboardEntry;
 import games.tapped.play.dto.TapCardLeaderboardResponse;
 import games.tapped.play.dto.TapCardLikeStatsResponse;
+import games.tapped.play.dto.TapCardTrayResponse;
 import games.tapped.play.repository.PersonalFeedRow;
 import games.tapped.play.repository.TapCardLeaderboardRow;
 import games.tapped.play.repository.TapCardLikeCountRow;
 import games.tapped.play.repository.TapCardLikeRepository;
 import games.tapped.play.repository.TapCardRepository;
+import games.tapped.play.repository.TapCardTrayRow;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -276,5 +278,75 @@ class TapCardQueryServiceTest {
 
         assertEquals(2L, response.items().get(0).likeCount());
         assertEquals(1L, response.items().get(0).replyCount());
+    }
+
+    private TapCardTrayRow trayRow(UUID cardId, UUID templateId) {
+        TapCardTrayRow row = mock(TapCardTrayRow.class);
+        given(row.getId()).willReturn(cardId);
+        given(row.getActivityInstanceId()).willReturn(UUID.randomUUID());
+        given(row.getTapId()).willReturn(UUID.randomUUID());
+        given(row.getNote()).willReturn("note");
+        given(row.getPhotoPath()).willReturn(null);
+        given(row.getCreatedAt()).willReturn(Instant.parse("2026-01-01T00:00:00Z"));
+        given(row.getTemplateId()).willReturn(templateId);
+        if (templateId != null) {
+            given(row.getTemplateTitle()).willReturn("Run every day");
+            given(row.getTemplateRules()).willReturn("Rules");
+            given(row.getTemplatePhotoPath()).willReturn(null);
+        }
+        given(row.getLikeCount()).willReturn(3L);
+        given(row.getReplyCount()).willReturn(2L);
+        return row;
+    }
+
+    @Test
+    void trayDelegatesToRepositoryWithMaxEntriesForCurrentUser() {
+        UUID userId = UUID.randomUUID();
+        given(tapCardRepository.findTodayTray(userId, TapCardQueryService.MAX_TRAY_ENTRIES))
+                .willReturn(List.of());
+
+        service.getTray(userId);
+
+        verify(tapCardRepository).findTodayTray(userId, TapCardQueryService.MAX_TRAY_ENTRIES);
+    }
+
+    @Test
+    void trayReturnsEmptyItemsWhenNoCardsToday() {
+        UUID userId = UUID.randomUUID();
+        given(tapCardRepository.findTodayTray(eq(userId), any(Integer.class))).willReturn(List.of());
+
+        TapCardTrayResponse response = service.getTray(userId);
+
+        assertTrue(response.items().isEmpty());
+    }
+
+    @Test
+    void trayMapsRowsIncludingTemplateAndCounts() {
+        UUID userId = UUID.randomUUID();
+        UUID cardId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        TapCardTrayRow row = trayRow(cardId, templateId);
+        given(tapCardRepository.findTodayTray(eq(userId), any(Integer.class))).willReturn(List.of(row));
+
+        TapCardTrayResponse response = service.getTray(userId);
+
+        assertEquals(1, response.items().size());
+        assertEquals(cardId, response.items().get(0).id());
+        assertEquals(templateId, response.items().get(0).template().id());
+        assertEquals("Run every day", response.items().get(0).template().title());
+        assertEquals(3L, response.items().get(0).likeCount());
+        assertEquals(2L, response.items().get(0).replyCount());
+    }
+
+    @Test
+    void trayMapsMissingTemplateToNull() {
+        UUID userId = UUID.randomUUID();
+        UUID cardId = UUID.randomUUID();
+        TapCardTrayRow row = trayRow(cardId, null);
+        given(tapCardRepository.findTodayTray(eq(userId), any(Integer.class))).willReturn(List.of(row));
+
+        TapCardTrayResponse response = service.getTray(userId);
+
+        assertEquals(null, response.items().get(0).template());
     }
 }

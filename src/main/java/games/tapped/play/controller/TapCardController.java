@@ -5,6 +5,7 @@ import games.tapped.play.dto.PersonalFeedResponse;
 import games.tapped.play.dto.TapCardLeaderboardResponse;
 import games.tapped.play.dto.TapCardLikeResponse;
 import games.tapped.play.dto.TapCardLikeStatsResponse;
+import games.tapped.play.dto.TapCardTrayResponse;
 import games.tapped.play.service.TapCardLikeService;
 import games.tapped.play.service.TapCardQueryService;
 import games.tapped.security.AppJwtPrincipal;
@@ -37,6 +38,11 @@ public class TapCardController {
     @GetMapping("/personal-feed")
     public PersonalFeedResponse getPersonalFeed(@AuthenticationPrincipal AppJwtPrincipal principal) {
         return queryService.getPersonalFeed(principal.userId());
+    }
+
+    @GetMapping("/tray")
+    public TapCardTrayResponse getTray(@AuthenticationPrincipal AppJwtPrincipal principal) {
+        return queryService.getTray(principal.userId());
     }
 
     @GetMapping("/like-stats")

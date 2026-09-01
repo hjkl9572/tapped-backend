@@ -11,6 +11,8 @@ import games.tapped.play.dto.CoverCardResponse;
 import games.tapped.play.dto.CreateInstanceRequest;
 import games.tapped.play.dto.CreateInstanceResponse;
 import games.tapped.play.dto.CreateTapCardRequest;
+import games.tapped.play.dto.InstanceDashboardItem;
+import games.tapped.play.dto.InstanceDashboardResponse;
 import games.tapped.play.dto.PlayInstanceSummary;
 import games.tapped.play.dto.PlayInstanceSummaryResponse;
 import games.tapped.play.dto.PlayInstanceTemplateSummary;
@@ -50,6 +52,7 @@ import games.tapped.play.repository.ActivityInstanceChallengeMailTokenRepository
 import games.tapped.play.repository.ActivityInstanceRepository;
 import games.tapped.play.repository.ActivityTapRepository;
 import games.tapped.play.repository.ActivityTemplateRepository;
+import games.tapped.play.repository.InstanceDashboardRow;
 import games.tapped.play.repository.TapCardRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -58,8 +61,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -183,6 +188,47 @@ public class ActivityInstanceService {
         return new PlayInstanceSummaryResponse(
                 toSummary(instance, template, config, latestTap, firstCard)
         );
+    }
+
+    @Transactional(readOnly = true)
+    public InstanceDashboardResponse getDashboard(UUID userId) {
+        return new InstanceDashboardResponse(
+                instanceRepository.findDashboardInstances(userId)
+                        .stream()
+                        .map(this::toDashboardItem)
+                        .toList()
+        );
+    }
+
+    private InstanceDashboardItem toDashboardItem(InstanceDashboardRow row) {
+        TapSummary latestTap = row.getLatestTapId() == null
+                ? null
+                : new TapSummary(
+                        row.getLatestTapId(),
+                        ActivityTapState.valueOf(row.getLatestTapState()),
+                        row.getLatestTapSequenceNo(),
+                        toOffsetDateTime(row.getLatestTapFirstHappenedAt()),
+                        toOffsetDateTime(row.getLatestTapFinalizedAt()),
+                        toOffsetDateTime(row.getLatestTapCanceledAt())
+                );
+
+        return new InstanceDashboardItem(
+                row.getId(),
+                ActivityModeKind.valueOf(row.getModeKind()),
+                row.getTitle(),
+                row.getRules(),
+                row.getPhotoPath(),
+                TemplatePlayContext.valueOf(row.getPlayContext()),
+                TemplateRelationshipMode.valueOf(row.getRelationshipMode()),
+                row.getProofKind(),
+                toOffsetDateTime(row.getStartedAt()),
+                toOffsetDateTime(row.getUpdatedAt()),
+                latestTap
+        );
+    }
+
+    private OffsetDateTime toOffsetDateTime(Instant instant) {
+        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
     }
 
     @Transactional

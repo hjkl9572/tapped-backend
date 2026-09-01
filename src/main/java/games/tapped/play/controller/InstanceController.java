@@ -10,6 +10,7 @@ import games.tapped.play.dto.CoverCardResponse;
 import games.tapped.play.dto.CreateInstanceRequest;
 import games.tapped.play.dto.CreateInstanceResponse;
 import games.tapped.play.dto.CreateTapCardRequest;
+import games.tapped.play.dto.InstanceDashboardResponse;
 import games.tapped.play.dto.PlayInstanceSummaryResponse;
 import games.tapped.play.dto.RefDecisionErrorResponse;
 import games.tapped.play.dto.RefDecisionRequest;
@@ -54,6 +55,13 @@ public class InstanceController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(service.create(principal.userId(), request));
+    }
+
+    @GetMapping("/dashboard")
+    public InstanceDashboardResponse dashboard(
+            @AuthenticationPrincipal AppJwtPrincipal principal
+    ) {
+        return service.getDashboard(principal.userId());
     }
 
     @GetMapping("/{id}")
