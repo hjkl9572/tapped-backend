@@ -33,3 +33,11 @@
     jwt:
         public-key: classpath:keys/public.pem
         private-key: file:${JWT_PRIVATE_KEY_PATH}
+
+    resend:
+      api-key: ${RESEND_API_KEY}
+      from-address: ${MAIL_FROM_ADDRESS:no-reply@notify.goofed.co}
+      subject-prefix: ${MAIL_SUBJECT_PREFIX:Goofed}
+
+    app:
+      base-url: ${APP_BASE_URL:http://localhost:3000}

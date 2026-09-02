@@ -1,13 +1,16 @@
 package games.tapped.play.service;
 
+import games.tapped.play.dto.PatchTemplateRequest;
 import games.tapped.play.dto.ShowcaseTemplatesResponse;
 import games.tapped.play.entity.ActivityTemplate;
 import games.tapped.play.dto.UpdateTemplateRequest;
+import games.tapped.play.entity.TemplateLifecycleState;
 import games.tapped.play.entity.TemplateVisibility;
 import games.tapped.play.repository.ActivityTemplateChallengeConfigRepository;
 import games.tapped.play.repository.ActivityTemplateRepository;
 import games.tapped.play.repository.PublicActivityTemplateRepository;
 import games.tapped.play.repository.ShowcaseTemplateRow;
+import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -16,6 +19,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -65,6 +70,39 @@ class ActivityTemplateServiceTest {
 
         assertEquals("New title", template.getTitle());
         assertEquals("New rules", template.getRules());
+        assertEquals(userId, template.getUpdatedBy());
+    }
+
+    @Test
+    void patchOnlyChangesProvidedFields() {
+        UUID userId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+
+        ActivityTemplate template =
+                ActivityTemplate.createRoot(
+                        userId,
+                        "Old title",
+                        "Old rules"
+                );
+        template.changeVisibility(TemplateVisibility.PRIVATE);
+
+        given(repository.findByIdForUpdate(templateId))
+                .willReturn(Optional.of(template));
+
+        PatchTemplateRequest request = new PatchTemplateRequest(
+                null,
+                null,
+                TemplateVisibility.PUBLIC,
+                null,
+                null,
+                null
+        );
+
+        service.patch(templateId, userId, request);
+
+        assertEquals("Old title", template.getTitle());
+        assertEquals("Old rules", template.getRules());
+        assertEquals(TemplateVisibility.PUBLIC, template.getVisibility());
         assertEquals(userId, template.getUpdatedBy());
     }
 
@@ -153,23 +191,92 @@ class ActivityTemplateServiceTest {
     }
 
     @Test
-    void anyoneCanGetPublicTemplate() {
+    void anonymousCanGetPublicPublishedTemplate() {
+        UUID ownerId = UUID.randomUUID();
+
+        ActivityTemplate template =
+                ActivityTemplate.createRoot(
+                        UUID.randomUUID(),
+                        ownerId,
+                        "Public template",
+                        "Rules",
+                        TemplateVisibility.PUBLIC,
+                        TemplateLifecycleState.PUBLISHED,
+                        null,
+                        OffsetDateTime.now(ZoneOffset.UTC)
+                );
+
+        given(repository.findById(template.getId()))
+                .willReturn(Optional.of(template));
+
+        ActivityTemplate result =
+                service.get(template.getId(), null);
+
+        assertSame(template, result);
+    }
+
+    @Test
+    void anonymousCannotGetPublicDraftTemplate() {
         UUID ownerId = UUID.randomUUID();
 
         ActivityTemplate template =
                 ActivityTemplate.createRoot(
                         ownerId,
-                        "Public template",
+                        "Public draft template",
                         "Rules"
                 );
 
-        UUID templateId = template.getId();
+        given(repository.findById(template.getId()))
+                .willReturn(Optional.of(template));
 
-        given(repository.findById(templateId))
+        assertThrows(
+                EntityNotFoundException.class,
+                () -> service.get(template.getId(), null)
+        );
+    }
+
+    @Test
+    void nonOwnerCannotGetPublicArchivedTemplate() {
+        UUID ownerId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+
+        ActivityTemplate template =
+                ActivityTemplate.createRoot(
+                        UUID.randomUUID(),
+                        ownerId,
+                        "Archived template",
+                        "Rules",
+                        TemplateVisibility.PUBLIC,
+                        TemplateLifecycleState.ARCHIVED,
+                        null,
+                        OffsetDateTime.now(ZoneOffset.UTC)
+                );
+
+        given(repository.findById(template.getId()))
+                .willReturn(Optional.of(template));
+
+        assertThrows(
+                EntityNotFoundException.class,
+                () -> service.get(template.getId(), otherUserId)
+        );
+    }
+
+    @Test
+    void ownerCanGetOwnDraftTemplate() {
+        UUID ownerId = UUID.randomUUID();
+
+        ActivityTemplate template =
+                ActivityTemplate.createRoot(
+                        ownerId,
+                        "Public draft template",
+                        "Rules"
+                );
+
+        given(repository.findById(template.getId()))
                 .willReturn(Optional.of(template));
 
         ActivityTemplate result =
-                service.get(templateId, null);
+                service.get(template.getId(), ownerId);
 
         assertSame(template, result);
     }

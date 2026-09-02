@@ -6,6 +6,7 @@ import games.tapped.play.dto.TemplateCatalogResponse;
 import games.tapped.play.dto.TemplateChallengeModeRequest;
 import games.tapped.play.dto.TemplatePresetResponse;
 import games.tapped.play.dto.CreateTemplateRequest;
+import games.tapped.play.dto.PatchTemplateRequest;
 import games.tapped.play.entity.ActivityTemplate;
 import games.tapped.play.entity.ActivityTemplateChallengeConfig;
 import games.tapped.play.entity.PublicActivityTemplate;
@@ -139,6 +140,51 @@ public class ActivityTemplateService {
     }
 
     @Transactional
+    public void patch(
+            UUID templateId,
+            UUID userId,
+            PatchTemplateRequest request
+    ) {
+        ActivityTemplate template = repository.findByIdForUpdate(templateId)
+                .orElseThrow(() -> new EntityNotFoundException("Template not found"));
+
+        assertOwner(template, userId);
+        assertNotDeleted(template);
+
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        template.replaceContent(
+                request.title() == null
+                        ? template.getTitle()
+                        : normalizeRequiredText(request.title(), "title"),
+                request.rules() == null
+                        ? template.getRules()
+                        : normalizeNullableText(request.rules(), ""),
+                Objects.requireNonNullElse(
+                        request.visibility(),
+                        template.getVisibility()
+                ),
+                Objects.requireNonNullElse(
+                        request.lifecycleState(),
+                        template.getLifecycleState()
+                ),
+                request.photoPath() == null
+                        ? template.getPhotoPath()
+                        : normalizeNullableText(request.photoPath(), null),
+                userId,
+                now
+        );
+
+        if (request.modes() != null) {
+            syncChallengeConfig(
+                    template.getId(),
+                    request.modes().challenge(),
+                    now
+            );
+        }
+        syncCatalogProjection(template);
+    }
+
+    @Transactional
     public void delete(UUID templateId, UUID userId) {
         ActivityTemplate template = repository.findByIdForUpdate(templateId)
                 .orElseThrow(() -> new EntityNotFoundException("Template not found"));
@@ -146,7 +192,7 @@ public class ActivityTemplateService {
         assertOwner(template, userId);
         assertNotDeleted(template);
 
-        template.softDelete(userId);
+        template.softDelete(userId, OffsetDateTime.now(clock));
         publicTemplateRepository.deleteById(templateId);
     }
 
@@ -159,9 +205,23 @@ public class ActivityTemplateService {
             throw new EntityNotFoundException("Template not found");
         }
 
-        if (template.getVisibility() == TemplateVisibility.PRIVATE
-                && !Objects.equals(template.getCreatedBy(), userId)) {
+        if (Objects.equals(template.getCreatedBy(), userId)) {
+            return template;
+        }
+
+        return requirePubliclyVisible(template);
+    }
+
+    private ActivityTemplate requirePubliclyVisible(ActivityTemplate template) {
+        if (template.getVisibility() == TemplateVisibility.PRIVATE) {
             throw new AccessDeniedException("Not allowed");
+        }
+
+        boolean publiclySelectable = template.getLifecycleState() == TemplateLifecycleState.PUBLISHED
+                && "ACTIVE".equals(template.getStatus());
+
+        if (!publiclySelectable) {
+            throw new EntityNotFoundException("Template not found");
         }
 
         return template;

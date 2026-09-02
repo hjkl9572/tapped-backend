@@ -1,13 +1,11 @@
 package games.tapped.play.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.Valid;
 
-import java.util.Map;
-
+@JsonIgnoreProperties(ignoreUnknown = false)
 public record TemplateModesRequest(
         @Valid
-        TemplateChallengeModeRequest challenge,
-
-        Map<String, Object> additional
+        TemplateChallengeModeRequest challenge
 ) {
 }

@@ -5,6 +5,7 @@ import games.tapped.play.dto.TemplateCatalogResponse;
 import games.tapped.play.dto.TemplateMutationResponse;
 import games.tapped.play.dto.TemplateResponse;
 import games.tapped.play.dto.CreateTemplateRequest;
+import games.tapped.play.dto.PatchTemplateRequest;
 import games.tapped.play.dto.UpdateTemplateRequest;
 import games.tapped.play.entity.ActivityTemplate;
 import games.tapped.play.service.ActivityTemplateService;
@@ -60,12 +61,12 @@ public class TemplateController {
     }
 
     @PatchMapping("/{id}")
-    public ResponseEntity<Void> update(
+    public ResponseEntity<Void> patch(
             @PathVariable UUID id,
             @AuthenticationPrincipal AppJwtPrincipal principal,
-            @Valid @RequestBody UpdateTemplateRequest request
+            @Valid @RequestBody PatchTemplateRequest request
     ) {
-        service.update(
+        service.patch(
                 id,
                 principal.userId(),
                 request

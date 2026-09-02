@@ -34,7 +34,7 @@ class ActivityTemplateRepositoryTest {
 
     @Test
     void savesAndLoadsActivityTemplate() {
-        UUID userId = UUID.fromString("ad6178be-e5f6-4c61-8228-e2c025d360cf");
+        UUID userId = newOwner();
 
         ActivityTemplate template =
                 ActivityTemplate.createRoot(
@@ -102,7 +102,7 @@ class ActivityTemplateRepositoryTest {
         UUID owner = newOwner();
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         ActivityTemplate template = publishedTemplate(UUID.randomUUID(), owner, "Deleted", now);
-        template.softDelete(owner);
+        template.softDelete(owner, now);
         repository.saveAndFlush(template);
 
         List<ShowcaseTemplateRow> rows = repository.findShowcaseTemplates(50);

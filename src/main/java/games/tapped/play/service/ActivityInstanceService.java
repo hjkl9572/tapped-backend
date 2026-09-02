@@ -1,6 +1,7 @@
 package games.tapped.play.service;
 
 import games.tapped.common.exception.DomainConflictException;
+import games.tapped.common.exception.MailDeliveryException;
 import games.tapped.common.exception.UnprocessableOperationException;
 import games.tapped.play.dto.ChallengeFinalCallResponse;
 import games.tapped.play.dto.ChallengeProcessStatus;
@@ -45,6 +46,9 @@ import games.tapped.play.entity.TemplateLifecycleState;
 import games.tapped.play.entity.TemplatePlayContext;
 import games.tapped.play.entity.TemplateRelationshipMode;
 import games.tapped.play.entity.TemplateVisibility;
+import games.tapped.play.notification.MailDeliveryResult;
+import games.tapped.play.notification.MailSender;
+import games.tapped.play.notification.RefDecisionMailRequest;
 import games.tapped.play.repository.ActivityInstanceChallengeConfigRepository;
 import games.tapped.play.repository.ActivityInstanceChallengeDisputeRepository;
 import games.tapped.play.repository.ActivityInstanceChallengeEventRepository;
@@ -55,17 +59,19 @@ import games.tapped.play.repository.ActivityTemplateRepository;
 import games.tapped.play.repository.InstanceDashboardRow;
 import games.tapped.play.repository.TapCardRepository;
 import jakarta.persistence.EntityNotFoundException;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -75,7 +81,6 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 public class ActivityInstanceService {
 
     private static final ZoneId TAP_DAY_ZONE = ZoneId.of("America/New_York");
@@ -90,6 +95,9 @@ public class ActivityInstanceService {
             ChallengeEventType.REF_DECISION_FAIL
     );
 
+    private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
+    private static final int REF_ACCESS_TOKEN_EXPIRY_HOURS = 48;
+
     private final ActivityInstanceRepository instanceRepository;
     private final ActivityTemplateRepository templateRepository;
     private final ActivityInstanceChallengeConfigRepository challengeConfigRepository;
@@ -98,7 +106,36 @@ public class ActivityInstanceService {
     private final ActivityInstanceChallengeEventRepository challengeEventRepository;
     private final ActivityInstanceChallengeDisputeRepository disputeRepository;
     private final ActivityInstanceChallengeMailTokenRepository mailTokenRepository;
+    private final MailSender mailSender;
+    private final ChallengeEventRecorder eventRecorder;
+    private final String appBaseUrl;
     private final Clock clock = Clock.systemUTC();
+
+    public ActivityInstanceService(
+            ActivityInstanceRepository instanceRepository,
+            ActivityTemplateRepository templateRepository,
+            ActivityInstanceChallengeConfigRepository challengeConfigRepository,
+            ActivityTapRepository tapRepository,
+            TapCardRepository tapCardRepository,
+            ActivityInstanceChallengeEventRepository challengeEventRepository,
+            ActivityInstanceChallengeDisputeRepository disputeRepository,
+            ActivityInstanceChallengeMailTokenRepository mailTokenRepository,
+            MailSender mailSender,
+            ChallengeEventRecorder eventRecorder,
+            @Value("${spring.app.base-url}") String appBaseUrl
+    ) {
+        this.instanceRepository = instanceRepository;
+        this.templateRepository = templateRepository;
+        this.challengeConfigRepository = challengeConfigRepository;
+        this.tapRepository = tapRepository;
+        this.tapCardRepository = tapCardRepository;
+        this.challengeEventRepository = challengeEventRepository;
+        this.disputeRepository = disputeRepository;
+        this.mailTokenRepository = mailTokenRepository;
+        this.mailSender = mailSender;
+        this.eventRecorder = eventRecorder;
+        this.appBaseUrl = appBaseUrl;
+    }
 
     @Transactional
     public CreateInstanceResponse create(
@@ -444,7 +481,7 @@ public class ActivityInstanceService {
     }
 
     @Transactional
-    public String prepareRefNotification(
+    public void prepareRefNotification(
             UUID userId,
             UUID instanceId
     ) {
@@ -452,26 +489,81 @@ public class ActivityInstanceService {
         ActivityInstance instance = requireOwnedInstanceForUpdate(instanceId, userId);
         ActivityInstanceChallengeConfig config = requireChallengeConfigForUpdate(instanceId);
 
-        if (normalizeNullableText(config.getRefEmail(), null) == null) {
+        String refEmail = normalizeNullableText(config.getRefEmail(), null);
+        if (refEmail == null) {
             throw new IllegalArgumentException("Ref email is missing for this play instance");
         }
 
-        String token = UUID.randomUUID().toString();
+        ActivityTemplate template = templateRepository.findById(instance.getActivityTemplateId())
+                .orElseThrow(() -> new EntityNotFoundException("Template not found"));
+
+        String token = generateOpaqueToken();
+        String finalCallUrl = appBaseUrl + "/play/challenge/ref-decision/" + token;
+        String contents = normalizeNullableText(
+                template.getRules(),
+                "Please review this play and make the final call."
+        );
+
+        MailDeliveryResult result = mailSender.sendRefDecisionRequest(new RefDecisionMailRequest(
+                refEmail,
+                Objects.requireNonNullElse(template.getTitle(), "Play review needed"),
+                contents,
+                finalCallUrl,
+                REF_ACCESS_TOKEN_EXPIRY_HOURS
+        ));
+
+        if (!result.success()) {
+            // Written in its own transaction so the failure is durable even though
+            // the token/config writes below never happen and this transaction rolls back.
+            eventRecorder.recordIndependently(
+                    instance.getId(),
+                    ChallengeEventType.MAIL_FAILED,
+                    mailFailedPayload(refEmail, result),
+                    now
+            );
+            throw new MailDeliveryException(
+                    "Failed to send referee decision email: "
+                            + Objects.requireNonNullElse(result.errorMessage(), "unknown error")
+            );
+        }
+
         mailTokenRepository.save(ActivityInstanceChallengeMailToken.createRefAccess(
                 instance.getId(),
                 token,
-                now.plusHours(48),
+                now.plusHours(REF_ACCESS_TOKEN_EXPIRY_HOURS),
                 now
         ));
         config.markRefMailSent(now);
         saveEvent(
                 instance.getId(),
-                ChallengeEventType.MAIL_TOKEN_CREATED,
-                Map.of("token_action", ActivityInstanceChallengeMailToken.REF_ACCESS_ACTION),
+                ChallengeEventType.MAIL_SENT,
+                mailSentPayload(refEmail, result),
                 now
         );
+    }
 
-        return token;
+    private String generateOpaqueToken() {
+        byte[] bytes = new byte[32];
+        TOKEN_RANDOM.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private Map<String, Object> mailSentPayload(String refEmail, MailDeliveryResult result) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("ref_email", refEmail);
+        payload.put("token_action", ActivityInstanceChallengeMailToken.REF_ACCESS_ACTION);
+        payload.put("expires_in_hours", REF_ACCESS_TOKEN_EXPIRY_HOURS);
+        payload.put("provider_message_id", result.providerMessageId());
+        return payload;
+    }
+
+    private Map<String, Object> mailFailedPayload(String refEmail, MailDeliveryResult result) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("ref_email", refEmail);
+        payload.put("token_action", ActivityInstanceChallengeMailToken.REF_ACCESS_ACTION);
+        payload.put("provider_status", result.providerStatus());
+        payload.put("provider_error", result.errorMessage());
+        return payload;
     }
 
     @Transactional(readOnly = true)

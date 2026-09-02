@@ -195,8 +195,8 @@ public class ActivityTemplate {
         this.updatedBy = updatedBy;
     }
 
-    public void softDelete(UUID deletedBy) {
-        this.deletedAt = OffsetDateTime.now(ZoneOffset.UTC);
+    public void softDelete(UUID deletedBy, OffsetDateTime now) {
+        this.deletedAt = now;
         this.deletedBy = deletedBy;
     }
 

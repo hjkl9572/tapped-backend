@@ -7,6 +7,7 @@ import games.tapped.play.dto.TemplateScheduleRequest;
 import games.tapped.play.dto.ToggleTapResponse;
 import games.tapped.play.entity.ActivityInstance;
 import games.tapped.play.entity.ActivityInstanceChallengeConfig;
+import games.tapped.play.entity.ActivityInstanceChallengeEvent;
 import games.tapped.play.entity.ActivityTap;
 import games.tapped.play.entity.ActivityTapState;
 import games.tapped.play.entity.ActivityTemplate;
@@ -14,6 +15,11 @@ import games.tapped.play.entity.TemplateLifecycleState;
 import games.tapped.play.entity.TemplatePlayContext;
 import games.tapped.play.entity.TemplateRelationshipMode;
 import games.tapped.play.entity.TemplateVisibility;
+import games.tapped.common.exception.MailDeliveryException;
+import games.tapped.play.entity.ChallengeEventType;
+import games.tapped.play.notification.MailDeliveryResult;
+import games.tapped.play.notification.MailSender;
+import games.tapped.play.notification.RefDecisionMailRequest;
 import games.tapped.play.repository.ActivityInstanceChallengeConfigRepository;
 import games.tapped.play.repository.ActivityInstanceChallengeDisputeRepository;
 import games.tapped.play.repository.ActivityInstanceChallengeEventRepository;
@@ -23,6 +29,7 @@ import games.tapped.play.repository.ActivityTapRepository;
 import games.tapped.play.repository.ActivityTemplateRepository;
 import games.tapped.play.repository.InstanceDashboardRow;
 import games.tapped.play.repository.TapCardRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -30,6 +37,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -39,12 +47,17 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class ActivityInstanceServiceTest {
@@ -73,8 +86,19 @@ class ActivityInstanceServiceTest {
     @Mock
     ActivityInstanceChallengeMailTokenRepository mailTokenRepository;
 
+    @Mock
+    MailSender mailSender;
+
+    @Mock
+    ChallengeEventRecorder eventRecorder;
+
     @InjectMocks
     ActivityInstanceService service;
+
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(service, "appBaseUrl", "https://tapped.example");
+    }
 
     @Test
     void createsChallengeInstanceFromPlayableTemplate() {
@@ -222,6 +246,132 @@ class ActivityInstanceServiceTest {
         verify(tapRepository).save(tapCaptor.capture());
         assertEquals(userId, tapCaptor.getValue().getTappedBy());
         assertEquals(instance.getId(), tapCaptor.getValue().getActivityInstanceId());
+    }
+
+    @Test
+    void prepareRefNotificationSendsMailAndRecordsSuccess() {
+        UUID userId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        ActivityTemplate template = publishedTemplate(templateId, userId);
+        ActivityInstance instance = ActivityInstance.createChallenge(
+                templateId,
+                userId,
+                TemplatePlayContext.ONLINE,
+                TemplateRelationshipMode.SOLO,
+                UUID.randomUUID().toString(),
+                1,
+                null,
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+        ActivityInstanceChallengeConfig config = ActivityInstanceChallengeConfig.create(
+                instance.getId(),
+                "ref@example.com",
+                500,
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+
+        given(instanceRepository.findByIdForUpdate(instance.getId()))
+                .willReturn(Optional.of(instance));
+        given(challengeConfigRepository.findByActivityInstanceIdForUpdate(instance.getId()))
+                .willReturn(Optional.of(config));
+        given(templateRepository.findById(templateId))
+                .willReturn(Optional.of(template));
+        given(mailSender.sendRefDecisionRequest(any(RefDecisionMailRequest.class)))
+                .willReturn(MailDeliveryResult.success("resend-message-id"));
+
+        service.prepareRefNotification(userId, instance.getId());
+
+        assertNotNull(config.getLastRefResendAt());
+        verify(mailTokenRepository).save(any());
+
+        ArgumentCaptor<ActivityInstanceChallengeEvent> eventCaptor =
+                ArgumentCaptor.forClass(ActivityInstanceChallengeEvent.class);
+        verify(challengeEventRepository).save(eventCaptor.capture());
+        assertEquals(ChallengeEventType.MAIL_SENT, eventCaptor.getValue().getEventType());
+        assertEquals("ref@example.com", eventCaptor.getValue().getPayload().get("ref_email"));
+
+        verifyNoInteractions(eventRecorder);
+    }
+
+    @Test
+    void prepareRefNotificationRecordsFailureWithoutPersistingTokenOrConfig() {
+        UUID userId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        ActivityTemplate template = publishedTemplate(templateId, userId);
+        ActivityInstance instance = ActivityInstance.createChallenge(
+                templateId,
+                userId,
+                TemplatePlayContext.ONLINE,
+                TemplateRelationshipMode.SOLO,
+                UUID.randomUUID().toString(),
+                1,
+                null,
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+        ActivityInstanceChallengeConfig config = ActivityInstanceChallengeConfig.create(
+                instance.getId(),
+                "ref@example.com",
+                500,
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+
+        given(instanceRepository.findByIdForUpdate(instance.getId()))
+                .willReturn(Optional.of(instance));
+        given(challengeConfigRepository.findByActivityInstanceIdForUpdate(instance.getId()))
+                .willReturn(Optional.of(config));
+        given(templateRepository.findById(templateId))
+                .willReturn(Optional.of(template));
+        given(mailSender.sendRefDecisionRequest(any(RefDecisionMailRequest.class)))
+                .willReturn(MailDeliveryResult.failure(502, "resend is down"));
+
+        assertThrows(
+                MailDeliveryException.class,
+                () -> service.prepareRefNotification(userId, instance.getId())
+        );
+
+        assertNull(config.getLastRefResendAt());
+        verify(mailTokenRepository, never()).save(any());
+        verify(challengeEventRepository, never()).save(any());
+        verify(eventRecorder).recordIndependently(
+                eq(instance.getId()),
+                eq(ChallengeEventType.MAIL_FAILED),
+                any(),
+                any()
+        );
+    }
+
+    @Test
+    void prepareRefNotificationRequiresRefEmail() {
+        UUID userId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        ActivityInstance instance = ActivityInstance.createChallenge(
+                templateId,
+                userId,
+                TemplatePlayContext.ONLINE,
+                TemplateRelationshipMode.SOLO,
+                UUID.randomUUID().toString(),
+                1,
+                null,
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+        ActivityInstanceChallengeConfig config = ActivityInstanceChallengeConfig.create(
+                instance.getId(),
+                null,
+                500,
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+
+        given(instanceRepository.findByIdForUpdate(instance.getId()))
+                .willReturn(Optional.of(instance));
+        given(challengeConfigRepository.findByActivityInstanceIdForUpdate(instance.getId()))
+                .willReturn(Optional.of(config));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.prepareRefNotification(userId, instance.getId())
+        );
+
+        verifyNoInteractions(mailSender);
     }
 
     @Test

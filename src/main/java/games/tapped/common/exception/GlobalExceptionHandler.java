@@ -59,6 +59,18 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(MailDeliveryException.class)
+    public ResponseEntity<Map<String, String>> handleMailDeliveryFailure(
+            MailDeliveryException exception
+    ) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_GATEWAY)
+                .body(Map.of(
+                        "error", "MAIL_DELIVERY_FAILED",
+                        "message", exception.getMessage()
+                ));
+    }
+
     @ExceptionHandler(UnprocessableOperationException.class)
     public ResponseEntity<Map<String, String>> handleUnprocessableOperation(
             UnprocessableOperationException exception

@@ -1,6 +1,7 @@
 package games.tapped.play.controller;
 
 import games.tapped.play.dto.CreateTemplateRequest;
+import games.tapped.play.dto.PatchTemplateRequest;
 import games.tapped.play.dto.ShowcaseTemplateItem;
 import games.tapped.play.dto.ShowcaseTemplatesResponse;
 import games.tapped.play.dto.UpdateTemplateRequest;
@@ -142,6 +143,39 @@ class TemplateControllerTest {
                 eq(templateId),
                 eq(userId),
                 any(UpdateTemplateRequest.class)
+        );
+    }
+
+    @Test
+    void authenticatedUserCanPatchOnlyVisibility() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+
+        AppJwtPrincipal principal = new AppJwtPrincipal(userId);
+
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken(
+                        principal,
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_USER"))
+                );
+
+        mockMvc.perform(
+                        patch("/api/templates/{templateId}", templateId)
+                                .with(authentication(authentication))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                    {
+                                        "visibility": "PUBLIC"
+                                    }
+                                    """)
+                )
+                .andExpect(status().isNoContent());
+
+        verify(activityTemplateService).patch(
+                eq(templateId),
+                eq(userId),
+                any(PatchTemplateRequest.class)
         );
     }
 
